@@ -1,0 +1,1746 @@
+{
+  "manifest": {
+    "run_id": "bench-offline-20261124T153931Z-69cf781284a6",
+    "version": "dev",
+    "git_head": "e6ec56999175509551a1e43a3ee3b053d0941bd9",
+    "worktree_fingerprint": "M .gitignore\n M agent/blackboard_inheritance_test.go\n M agent/chat.go\n M agent/goals.go\n M agent/mainagent.go\n M agent/planner.go\n M agent/provider.go\n M agent/provider_capture_test.go\n M agent/tools.go\n M agent/worker.go\n M cmd/artex/main.go\n M db/activity_page_test.go\n M db/commands.go\n M db/constants.go\n M db/db.go\n M db/exploration.go\n M db/finding_traffic.go\n M db/findings.go\n M db/findings_test.go\n M db/schema.sql\n M enrich/enrich.go\n M evidence/store.go\n M evidence/store_test.go\n M llmrec/llmrec.go\n M selfupdate/github.go\n M selfupdate/stage.go\n M server/assembly.go\n M server/auth.go\n M server/customtool.go\n M server/dto.go\n M server/engine.go\n M server/finding_retests.go\n M server/finding_traffic.go\n M server/finding_workflow_test.go\n M server/findings_groups_test.go\n M server/manager.go\n M server/server.go\n M server/task_llm.go\n M traffic/traffic.go\n?? QUICKSTART.md\n?? agent/bash_guard.go\n?? agent/bash_guard_test.go\n?? agent/egress_policy.go\n?? agent/egress_policy_test.go\n?? agent/execution_boundary_test.go\n?? agent/finding_gate.go\n?? agent/finding_gate_test.go\n?? agent/fs_containment.go\n?? agent/fs_containment_test.go\n?? agent/http_connection_counter_test.go\n?? agent/http_redirect_test.go\n?? agent/httpclient.go\n?? agent/planner_intent_test.go\n?? agent/planner_telemetry_fix_test.go\n?? agent/provider_adversarial_test.go\n?? agent/provider_dns_test.go\n?? agent/provider_egress.go\n?? agent/provider_egress_test.go\n?? agent/provider_retry_test.go\n?? agent/provider_transport_test.go\n?? agent/provider_trust_concurrency_test.go\n?? agent/provider_trust_test.go\n?? agent/scope_boundary_test.go\n?? agent/scope_failclosed_test.go\n?? agent/scope_pin_adversarial_test.go\n?? agent/scope_pin_test.go\n?? agent/scope_reuse_test.go\n?? agent/scope_task_isolation_test.go\n?? agent/scopecheck.go\n?? agent/scopecheck_test.go\n?? agent/strategy.go\n?? agent/target_boundary_test.go\n?? agent/tools_attackpath.go\n?? agent/tools_attackpath_test.go\n?? agent/tools_diff.go\n?? agent/tools_diff_test.go\n?? agent/tools_http.go\n?? agent/tools_login.go\n?? agent/tools_login_test.go\n?? agent/tools_probe.go\n?? agent/tools_probe_test.go\n?? agent/tools_retest.go\n?? benchmark/\n?? cmd/artex/diagnostics.go\n?? db/commands_telemetry_test.go\n?? db/finding_dedup_db_test.go\n?? db/finding_dedup_telemetry.go\n?? db/finding_dedup_test.go\n?? db/finding_identity.go\n?? db/finding_identity_empty_name_test.go\n?? db/finding_identity_test.go\n?? db/intent_dedup_telemetry.go\n?? db/intent_dedup_test.go\n?? db/intent_identity.go\n?? db/intent_identity_test.go\n?? db/intent_plan.go\n?? db/intent_plan_test.go\n?? enrich/egress_test.go\n?? evidence/dedup_integrity_test.go\n?? evidence/v8_6_3_evidence_validity_test.go\n?? evidence/v8_6_tamper_test.go\n?? scripts/\n?? selfupdate/egress.go\n?? selfupdate/egress_test.go\n?? server/customtool_exec_test.go\n?? server/diagnostics.go\n?? server/diagnostics_trend.go\n?? server/egress_audit_wiring_test.go\n?? server/secrets_leak_test.go\n?? server/telemetry.go\n?? server/v8_6_3_audit_durability_test.go\n?? server/v8_6_3_auth_test.go\n?? server/v8_6_3_evidence_gate_test.go\n?? telemetry/\n?? traffic/egress.go\n?? traffic/egress_allowlist_concurrency_test.go\n?? traffic/egress_allowlist_test.go\n?? traffic/egress_dial.go\n?? traffic/egress_dial_test.go\n?? traffic/egress_ipv6_tls_test.go\n?? traffic/egress_test.go",
+    "benchmark_suite": "artex-v5-hardening-v924",
+    "suite_version": "1",
+    "cases": 5,
+    "mode": "offline",
+    "seed": 924,
+    "os": "windows",
+    "arch": "amd64",
+    "go_version": "go1.26.11",
+    "execution_mode": "benchmark-runner",
+    "started_at": "2026-11-24T15:39:29.432929Z",
+    "finished_at": "2026-11-24T15:39:31.1986291Z",
+    "duration_secs": 1.7657001,
+    "config_fingerprint": "a5920cf1347cffc4081eaa48a8d607f0e2ac1dd2e7c4d12ad12733a7fd8e4a33",
+    "secret_redactions": 1,
+    "worktree_entries": 121
+  },
+  "metrics": {
+    "suite_id": "artex-v5-hardening-v924",
+    "mode": "offline",
+    "version": "",
+    "cases": [
+      {
+        "case_id": "hardening_sqli_two_parameters",
+        "task_id": "1",
+        "status": "completed",
+        "cm": {
+          "tp": 2,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0
+        },
+        "metrics": {
+          "tp": 2,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1,
+          "specificity": 0,
+          "false_positive_rate": 0,
+          "false_negative_rate": 0,
+          "accuracy": 1,
+          "case_completion_rate": 0,
+          "evidence_validity_rate": 0,
+          "findings_without_evidence": 2,
+          "evidence_valid_findings": 0,
+          "evidence_invalid_findings": 0,
+          "evidence_unknown_findings": 0,
+          "findings_total": 2,
+          "finding_evidence_coverage": 0,
+          "expected_findings": 2,
+          "actual_findings": 2
+        },
+        "match_result": {
+          "matched": [
+            {
+              "expected": {
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (id)",
+                "severity": "high",
+                "evidence_required": false
+              },
+              "actual": {
+                "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+                "node_id": 3,
+                "finding_id": 1,
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (id)",
+                "severity": "high",
+                "worker": "work#1",
+                "evidence_state": "none",
+                "evidence_has_body": true
+              }
+            },
+            {
+              "expected": {
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (sort)",
+                "severity": "high",
+                "evidence_required": false
+              },
+              "actual": {
+                "fingerprint": "sqli\u0000blind sql injection (sort)\u0000high",
+                "node_id": 4,
+                "finding_id": 2,
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (sort)",
+                "severity": "high",
+                "worker": "work#1",
+                "evidence_state": "none",
+                "evidence_has_body": true
+              }
+            }
+          ],
+          "unmatched_expected": null,
+          "unmatched_actual": null
+        },
+        "actual_findings": [
+          {
+            "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+            "node_id": 3,
+            "finding_id": 1,
+            "vuln_class": "SQLi",
+            "name": "Blind SQL Injection (id)",
+            "severity": "high",
+            "worker": "work#1",
+            "evidence_state": "none",
+            "evidence_has_body": true
+          },
+          {
+            "fingerprint": "sqli\u0000blind sql injection (sort)\u0000high",
+            "node_id": 4,
+            "finding_id": 2,
+            "vuln_class": "SQLi",
+            "name": "Blind SQL Injection (sort)",
+            "severity": "high",
+            "worker": "work#1",
+            "evidence_state": "none",
+            "evidence_has_body": true
+          }
+        ],
+        "tool_invocations": 2,
+        "tool_failures": 0,
+        "evidence_validation_failures": 0,
+        "timings": {
+          "total_task_duration": {
+            "count": 1,
+            "mean_ms": 235.0089,
+            "median_ms": 235.0089,
+            "p90_ms": 235.0089,
+            "p95_ms": 235.0089,
+            "min_ms": 235.0089,
+            "max_ms": 235.0089
+          },
+          "planner_model_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "worker_model_time": {
+            "count": 4,
+            "mean_ms": 9.4545,
+            "median_ms": 3.989,
+            "p90_ms": 32.793,
+            "p95_ms": 32.793,
+            "min_ms": 0.46,
+            "max_ms": 32.793
+          },
+          "tool_execution_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "evidence_validation_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "finding_validation_time": {
+            "count": 1,
+            "mean_ms": 4.9873,
+            "median_ms": 4.9873,
+            "p90_ms": 4.9873,
+            "p95_ms": 4.9873,
+            "min_ms": 4.9873,
+            "max_ms": 4.9873
+          }
+        },
+        "model_usage": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "provider_errors": 0,
+          "usage_metadata_available": false
+        },
+        "dedup": {
+          "submissions": 2,
+          "new": 2,
+          "duplicates": 0,
+          "evidence_attachments": 0,
+          "conflicts": 0,
+          "errors": 0
+        }
+      },
+      {
+        "case_id": "hardening_xss_two_endpoints",
+        "task_id": "2",
+        "status": "completed",
+        "cm": {
+          "tp": 2,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0
+        },
+        "metrics": {
+          "tp": 2,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1,
+          "specificity": 0,
+          "false_positive_rate": 0,
+          "false_negative_rate": 0,
+          "accuracy": 1,
+          "case_completion_rate": 0,
+          "evidence_validity_rate": 0,
+          "findings_without_evidence": 2,
+          "evidence_valid_findings": 0,
+          "evidence_invalid_findings": 0,
+          "evidence_unknown_findings": 0,
+          "findings_total": 2,
+          "finding_evidence_coverage": 0,
+          "expected_findings": 2,
+          "actual_findings": 2
+        },
+        "match_result": {
+          "matched": [
+            {
+              "expected": {
+                "vuln_class": "XSS",
+                "name": "Reflected XSS (profile)",
+                "severity": "medium",
+                "evidence_required": false
+              },
+              "actual": {
+                "fingerprint": "xss\u0000reflected xss (profile)\u0000medium",
+                "node_id": 8,
+                "finding_id": 4,
+                "vuln_class": "XSS",
+                "name": "Reflected XSS (profile)",
+                "severity": "medium",
+                "worker": "work#1",
+                "evidence_state": "none",
+                "evidence_has_body": true
+              }
+            },
+            {
+              "expected": {
+                "vuln_class": "XSS",
+                "name": "Reflected XSS (search)",
+                "severity": "medium",
+                "evidence_required": false
+              },
+              "actual": {
+                "fingerprint": "xss\u0000reflected xss (search)\u0000medium",
+                "node_id": 7,
+                "finding_id": 3,
+                "vuln_class": "XSS",
+                "name": "Reflected XSS (search)",
+                "severity": "medium",
+                "worker": "work#1",
+                "evidence_state": "none",
+                "evidence_has_body": true
+              }
+            }
+          ],
+          "unmatched_expected": null,
+          "unmatched_actual": null
+        },
+        "actual_findings": [
+          {
+            "fingerprint": "xss\u0000reflected xss (search)\u0000medium",
+            "node_id": 7,
+            "finding_id": 3,
+            "vuln_class": "XSS",
+            "name": "Reflected XSS (search)",
+            "severity": "medium",
+            "worker": "work#1",
+            "evidence_state": "none",
+            "evidence_has_body": true
+          },
+          {
+            "fingerprint": "xss\u0000reflected xss (profile)\u0000medium",
+            "node_id": 8,
+            "finding_id": 4,
+            "vuln_class": "XSS",
+            "name": "Reflected XSS (profile)",
+            "severity": "medium",
+            "worker": "work#1",
+            "evidence_state": "none",
+            "evidence_has_body": true
+          }
+        ],
+        "tool_invocations": 2,
+        "tool_failures": 0,
+        "evidence_validation_failures": 0,
+        "timings": {
+          "total_task_duration": {
+            "count": 1,
+            "mean_ms": 119.0607,
+            "median_ms": 119.0607,
+            "p90_ms": 119.0607,
+            "p95_ms": 119.0607,
+            "min_ms": 119.0607,
+            "max_ms": 119.0607
+          },
+          "planner_model_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "worker_model_time": {
+            "count": 4,
+            "mean_ms": 7.2545,
+            "median_ms": 5.511,
+            "p90_ms": 22.278,
+            "p95_ms": 22.278,
+            "min_ms": 0.597,
+            "max_ms": 22.278
+          },
+          "tool_execution_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "evidence_validation_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "finding_validation_time": {
+            "count": 1,
+            "mean_ms": 12.5522,
+            "median_ms": 12.5522,
+            "p90_ms": 12.5522,
+            "p95_ms": 12.5522,
+            "min_ms": 12.5522,
+            "max_ms": 12.5522
+          }
+        },
+        "model_usage": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "provider_errors": 0,
+          "usage_metadata_available": false
+        },
+        "dedup": {
+          "submissions": 2,
+          "new": 2,
+          "duplicates": 0,
+          "evidence_attachments": 0,
+          "conflicts": 0,
+          "errors": 0
+        }
+      },
+      {
+        "case_id": "hardening_unconfirmed_no_finding",
+        "task_id": "3",
+        "status": "completed",
+        "cm": {
+          "tp": 0,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0
+        },
+        "metrics": {
+          "tp": 0,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "specificity": 0,
+          "false_positive_rate": 0,
+          "false_negative_rate": 0,
+          "accuracy": 0,
+          "case_completion_rate": 0,
+          "evidence_validity_rate": 0,
+          "findings_without_evidence": 0,
+          "evidence_valid_findings": 0,
+          "evidence_invalid_findings": 0,
+          "evidence_unknown_findings": 0,
+          "findings_total": 0,
+          "finding_evidence_coverage": 0,
+          "expected_findings": 0,
+          "actual_findings": 0
+        },
+        "match_result": {
+          "matched": [],
+          "unmatched_expected": null,
+          "unmatched_actual": null
+        },
+        "actual_findings": null,
+        "tool_invocations": 0,
+        "tool_failures": 0,
+        "evidence_validation_failures": 0,
+        "timings": {
+          "total_task_duration": {
+            "count": 1,
+            "mean_ms": 112.9334,
+            "median_ms": 112.9334,
+            "p90_ms": 112.9334,
+            "p95_ms": 112.9334,
+            "min_ms": 112.9334,
+            "max_ms": 112.9334
+          },
+          "planner_model_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "worker_model_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "tool_execution_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "evidence_validation_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "finding_validation_time": {
+            "count": 1,
+            "mean_ms": 7.4134,
+            "median_ms": 7.4134,
+            "p90_ms": 7.4134,
+            "p95_ms": 7.4134,
+            "min_ms": 7.4134,
+            "max_ms": 7.4134
+          }
+        },
+        "model_usage": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "provider_errors": 0,
+          "usage_metadata_available": false
+        },
+        "dedup": {
+          "submissions": 0,
+          "new": 0,
+          "duplicates": 0,
+          "evidence_attachments": 0,
+          "conflicts": 0,
+          "errors": 0
+        }
+      },
+      {
+        "case_id": "hardening_repeat_evidence_dedup",
+        "task_id": "4",
+        "status": "completed",
+        "cm": {
+          "tp": 1,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0
+        },
+        "metrics": {
+          "tp": 1,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1,
+          "specificity": 0,
+          "false_positive_rate": 0,
+          "false_negative_rate": 0,
+          "accuracy": 1,
+          "case_completion_rate": 0,
+          "evidence_validity_rate": 0,
+          "findings_without_evidence": 1,
+          "evidence_valid_findings": 0,
+          "evidence_invalid_findings": 0,
+          "evidence_unknown_findings": 0,
+          "findings_total": 1,
+          "finding_evidence_coverage": 0,
+          "expected_findings": 1,
+          "actual_findings": 1
+        },
+        "match_result": {
+          "matched": [
+            {
+              "expected": {
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (id)",
+                "severity": "high",
+                "evidence_required": false
+              },
+              "actual": {
+                "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+                "node_id": 13,
+                "finding_id": 5,
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (id)",
+                "severity": "high",
+                "worker": "work#2",
+                "evidence_state": "none",
+                "evidence_has_body": true
+              }
+            }
+          ],
+          "unmatched_expected": null,
+          "unmatched_actual": null
+        },
+        "actual_findings": [
+          {
+            "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+            "node_id": 13,
+            "finding_id": 5,
+            "vuln_class": "SQLi",
+            "name": "Blind SQL Injection (id)",
+            "severity": "high",
+            "worker": "work#2",
+            "evidence_state": "none",
+            "evidence_has_body": true
+          }
+        ],
+        "tool_invocations": 2,
+        "tool_failures": 0,
+        "evidence_validation_failures": 0,
+        "timings": {
+          "total_task_duration": {
+            "count": 1,
+            "mean_ms": 128.7457,
+            "median_ms": 128.7457,
+            "p90_ms": 128.7457,
+            "p95_ms": 128.7457,
+            "min_ms": 128.7457,
+            "max_ms": 128.7457
+          },
+          "planner_model_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "worker_model_time": {
+            "count": 4,
+            "mean_ms": 13.3355,
+            "median_ms": 15.008,
+            "p90_ms": 29.25,
+            "p95_ms": 29.25,
+            "min_ms": 1.285,
+            "max_ms": 29.25
+          },
+          "tool_execution_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "evidence_validation_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "finding_validation_time": {
+            "count": 1,
+            "mean_ms": 8.2769,
+            "median_ms": 8.2769,
+            "p90_ms": 8.2769,
+            "p95_ms": 8.2769,
+            "min_ms": 8.2769,
+            "max_ms": 8.2769
+          }
+        },
+        "model_usage": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "provider_errors": 0,
+          "usage_metadata_available": false
+        },
+        "dedup": {
+          "submissions": 2,
+          "new": 1,
+          "duplicates": 1,
+          "evidence_attachments": 0,
+          "conflicts": 0,
+          "errors": 0
+        }
+      },
+      {
+        "case_id": "hardening_mixed_vuln_classes",
+        "task_id": "5",
+        "status": "completed",
+        "cm": {
+          "tp": 2,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0
+        },
+        "metrics": {
+          "tp": 2,
+          "fp": 0,
+          "tn": 0,
+          "fn": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1,
+          "specificity": 0,
+          "false_positive_rate": 0,
+          "false_negative_rate": 0,
+          "accuracy": 1,
+          "case_completion_rate": 0,
+          "evidence_validity_rate": 0,
+          "findings_without_evidence": 2,
+          "evidence_valid_findings": 0,
+          "evidence_invalid_findings": 0,
+          "evidence_unknown_findings": 0,
+          "findings_total": 2,
+          "finding_evidence_coverage": 0,
+          "expected_findings": 2,
+          "actual_findings": 2
+        },
+        "match_result": {
+          "matched": [
+            {
+              "expected": {
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (login)",
+                "severity": "high",
+                "evidence_required": false
+              },
+              "actual": {
+                "fingerprint": "sqli\u0000blind sql injection (login)\u0000high",
+                "node_id": 16,
+                "finding_id": 6,
+                "vuln_class": "SQLi",
+                "name": "Blind SQL Injection (login)",
+                "severity": "high",
+                "worker": "work#1",
+                "evidence_state": "none",
+                "evidence_has_body": true
+              }
+            },
+            {
+              "expected": {
+                "vuln_class": "SSTI",
+                "name": "Server-Side Template Injection (eval)",
+                "severity": "high",
+                "evidence_required": false
+              },
+              "actual": {
+                "fingerprint": "ssti\u0000server-side template injection (eval)\u0000high",
+                "node_id": 17,
+                "finding_id": 7,
+                "vuln_class": "SSTI",
+                "name": "Server-Side Template Injection (eval)",
+                "severity": "high",
+                "worker": "work#1",
+                "evidence_state": "none",
+                "evidence_has_body": true
+              }
+            }
+          ],
+          "unmatched_expected": null,
+          "unmatched_actual": null
+        },
+        "actual_findings": [
+          {
+            "fingerprint": "sqli\u0000blind sql injection (login)\u0000high",
+            "node_id": 16,
+            "finding_id": 6,
+            "vuln_class": "SQLi",
+            "name": "Blind SQL Injection (login)",
+            "severity": "high",
+            "worker": "work#1",
+            "evidence_state": "none",
+            "evidence_has_body": true
+          },
+          {
+            "fingerprint": "ssti\u0000server-side template injection (eval)\u0000high",
+            "node_id": 17,
+            "finding_id": 7,
+            "vuln_class": "SSTI",
+            "name": "Server-Side Template Injection (eval)",
+            "severity": "high",
+            "worker": "work#1",
+            "evidence_state": "none",
+            "evidence_has_body": true
+          }
+        ],
+        "tool_invocations": 2,
+        "tool_failures": 0,
+        "evidence_validation_failures": 0,
+        "timings": {
+          "total_task_duration": {
+            "count": 1,
+            "mean_ms": 155.7133,
+            "median_ms": 155.7133,
+            "p90_ms": 155.7133,
+            "p95_ms": 155.7133,
+            "min_ms": 155.7133,
+            "max_ms": 155.7133
+          },
+          "planner_model_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "worker_model_time": {
+            "count": 4,
+            "mean_ms": 7.077,
+            "median_ms": 8.817,
+            "p90_ms": 11.679,
+            "p95_ms": 11.679,
+            "min_ms": 0.399,
+            "max_ms": 11.679
+          },
+          "tool_execution_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "evidence_validation_time": {
+            "count": 0,
+            "mean_ms": 0,
+            "median_ms": 0,
+            "p90_ms": 0,
+            "p95_ms": 0,
+            "min_ms": 0,
+            "max_ms": 0
+          },
+          "finding_validation_time": {
+            "count": 1,
+            "mean_ms": 33.6258,
+            "median_ms": 33.6258,
+            "p90_ms": 33.6258,
+            "p95_ms": 33.6258,
+            "min_ms": 33.6258,
+            "max_ms": 33.6258
+          }
+        },
+        "model_usage": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "provider_errors": 0,
+          "usage_metadata_available": false
+        },
+        "dedup": {
+          "submissions": 2,
+          "new": 2,
+          "duplicates": 0,
+          "evidence_attachments": 0,
+          "conflicts": 0,
+          "errors": 0
+        }
+      }
+    ],
+    "micro": {
+      "tp": 7,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "specificity": 0,
+      "false_positive_rate": 0,
+      "false_negative_rate": 0,
+      "accuracy": 1,
+      "case_completion_rate": 1,
+      "evidence_validity_rate": 0,
+      "findings_without_evidence": 7,
+      "evidence_valid_findings": 0,
+      "evidence_invalid_findings": 0,
+      "evidence_unknown_findings": 0,
+      "findings_total": 7,
+      "finding_evidence_coverage": 0,
+      "expected_findings": 7,
+      "actual_findings": 7
+    },
+    "macro": {
+      "cases": 5,
+      "precision": 0.8,
+      "recall": 0.8,
+      "f1": 0.8,
+      "specificity": 0,
+      "completed_cases": 5
+    },
+    "reliability": {
+      "tasks_completed": 5,
+      "tasks_failed": 0,
+      "tasks_timed_out": 0,
+      "tasks_cancelled": 0,
+      "incomplete_results": 0,
+      "tool_invocations": 8,
+      "tool_failures": 0,
+      "evidence_validation_failures": 0
+    },
+    "model_usage": {
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "provider_errors": 0,
+      "usage_metadata_available": false
+    },
+    "timings": {
+      "total_task_duration": {
+        "count": 0,
+        "mean_ms": 0,
+        "median_ms": 0,
+        "p90_ms": 0,
+        "p95_ms": 0,
+        "min_ms": 0,
+        "max_ms": 0
+      },
+      "planner_model_time": {
+        "count": 0,
+        "mean_ms": 0,
+        "median_ms": 0,
+        "p90_ms": 0,
+        "p95_ms": 0,
+        "min_ms": 0,
+        "max_ms": 0
+      },
+      "worker_model_time": {
+        "count": 0,
+        "mean_ms": 0,
+        "median_ms": 0,
+        "p90_ms": 0,
+        "p95_ms": 0,
+        "min_ms": 0,
+        "max_ms": 0
+      },
+      "tool_execution_time": {
+        "count": 0,
+        "mean_ms": 0,
+        "median_ms": 0,
+        "p90_ms": 0,
+        "p95_ms": 0,
+        "min_ms": 0,
+        "max_ms": 0
+      },
+      "evidence_validation_time": {
+        "count": 7,
+        "mean_ms": 4.677214285714285,
+        "median_ms": 2.0094,
+        "p90_ms": 4.3831,
+        "p95_ms": 18.9322,
+        "min_ms": 0.9978,
+        "max_ms": 18.9322
+      },
+      "finding_validation_time": {
+        "count": 0,
+        "mean_ms": 0,
+        "median_ms": 0,
+        "p90_ms": 0,
+        "p95_ms": 0,
+        "min_ms": 0,
+        "max_ms": 0
+      }
+    },
+    "case_completion_count": 5
+  },
+  "cases": [
+    {
+      "case_id": "hardening_sqli_two_parameters",
+      "task_id": "1",
+      "status": "completed",
+      "cm": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "metrics": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "specificity": 0,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0,
+        "accuracy": 1,
+        "case_completion_rate": 0,
+        "evidence_validity_rate": 0,
+        "findings_without_evidence": 2,
+        "evidence_valid_findings": 0,
+        "evidence_invalid_findings": 0,
+        "evidence_unknown_findings": 0,
+        "findings_total": 2,
+        "finding_evidence_coverage": 0,
+        "expected_findings": 2,
+        "actual_findings": 2
+      },
+      "match_result": {
+        "matched": [
+          {
+            "expected": {
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (id)",
+              "severity": "high",
+              "evidence_required": false
+            },
+            "actual": {
+              "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+              "node_id": 3,
+              "finding_id": 1,
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (id)",
+              "severity": "high",
+              "worker": "work#1",
+              "evidence_state": "none",
+              "evidence_has_body": true
+            }
+          },
+          {
+            "expected": {
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (sort)",
+              "severity": "high",
+              "evidence_required": false
+            },
+            "actual": {
+              "fingerprint": "sqli\u0000blind sql injection (sort)\u0000high",
+              "node_id": 4,
+              "finding_id": 2,
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (sort)",
+              "severity": "high",
+              "worker": "work#1",
+              "evidence_state": "none",
+              "evidence_has_body": true
+            }
+          }
+        ],
+        "unmatched_expected": null,
+        "unmatched_actual": null
+      },
+      "actual_findings": [
+        {
+          "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+          "node_id": 3,
+          "finding_id": 1,
+          "vuln_class": "SQLi",
+          "name": "Blind SQL Injection (id)",
+          "severity": "high",
+          "worker": "work#1",
+          "evidence_state": "none",
+          "evidence_has_body": true
+        },
+        {
+          "fingerprint": "sqli\u0000blind sql injection (sort)\u0000high",
+          "node_id": 4,
+          "finding_id": 2,
+          "vuln_class": "SQLi",
+          "name": "Blind SQL Injection (sort)",
+          "severity": "high",
+          "worker": "work#1",
+          "evidence_state": "none",
+          "evidence_has_body": true
+        }
+      ],
+      "tool_invocations": 2,
+      "tool_failures": 0,
+      "evidence_validation_failures": 0,
+      "timings": {
+        "total_task_duration": {
+          "count": 1,
+          "mean_ms": 235.0089,
+          "median_ms": 235.0089,
+          "p90_ms": 235.0089,
+          "p95_ms": 235.0089,
+          "min_ms": 235.0089,
+          "max_ms": 235.0089
+        },
+        "planner_model_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "worker_model_time": {
+          "count": 4,
+          "mean_ms": 9.4545,
+          "median_ms": 3.989,
+          "p90_ms": 32.793,
+          "p95_ms": 32.793,
+          "min_ms": 0.46,
+          "max_ms": 32.793
+        },
+        "tool_execution_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "evidence_validation_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "finding_validation_time": {
+          "count": 1,
+          "mean_ms": 4.9873,
+          "median_ms": 4.9873,
+          "p90_ms": 4.9873,
+          "p95_ms": 4.9873,
+          "min_ms": 4.9873,
+          "max_ms": 4.9873
+        }
+      },
+      "model_usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "provider_errors": 0,
+        "usage_metadata_available": false
+      },
+      "dedup": {
+        "submissions": 2,
+        "new": 2,
+        "duplicates": 0,
+        "evidence_attachments": 0,
+        "conflicts": 0,
+        "errors": 0
+      }
+    },
+    {
+      "case_id": "hardening_xss_two_endpoints",
+      "task_id": "2",
+      "status": "completed",
+      "cm": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "metrics": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "specificity": 0,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0,
+        "accuracy": 1,
+        "case_completion_rate": 0,
+        "evidence_validity_rate": 0,
+        "findings_without_evidence": 2,
+        "evidence_valid_findings": 0,
+        "evidence_invalid_findings": 0,
+        "evidence_unknown_findings": 0,
+        "findings_total": 2,
+        "finding_evidence_coverage": 0,
+        "expected_findings": 2,
+        "actual_findings": 2
+      },
+      "match_result": {
+        "matched": [
+          {
+            "expected": {
+              "vuln_class": "XSS",
+              "name": "Reflected XSS (profile)",
+              "severity": "medium",
+              "evidence_required": false
+            },
+            "actual": {
+              "fingerprint": "xss\u0000reflected xss (profile)\u0000medium",
+              "node_id": 8,
+              "finding_id": 4,
+              "vuln_class": "XSS",
+              "name": "Reflected XSS (profile)",
+              "severity": "medium",
+              "worker": "work#1",
+              "evidence_state": "none",
+              "evidence_has_body": true
+            }
+          },
+          {
+            "expected": {
+              "vuln_class": "XSS",
+              "name": "Reflected XSS (search)",
+              "severity": "medium",
+              "evidence_required": false
+            },
+            "actual": {
+              "fingerprint": "xss\u0000reflected xss (search)\u0000medium",
+              "node_id": 7,
+              "finding_id": 3,
+              "vuln_class": "XSS",
+              "name": "Reflected XSS (search)",
+              "severity": "medium",
+              "worker": "work#1",
+              "evidence_state": "none",
+              "evidence_has_body": true
+            }
+          }
+        ],
+        "unmatched_expected": null,
+        "unmatched_actual": null
+      },
+      "actual_findings": [
+        {
+          "fingerprint": "xss\u0000reflected xss (search)\u0000medium",
+          "node_id": 7,
+          "finding_id": 3,
+          "vuln_class": "XSS",
+          "name": "Reflected XSS (search)",
+          "severity": "medium",
+          "worker": "work#1",
+          "evidence_state": "none",
+          "evidence_has_body": true
+        },
+        {
+          "fingerprint": "xss\u0000reflected xss (profile)\u0000medium",
+          "node_id": 8,
+          "finding_id": 4,
+          "vuln_class": "XSS",
+          "name": "Reflected XSS (profile)",
+          "severity": "medium",
+          "worker": "work#1",
+          "evidence_state": "none",
+          "evidence_has_body": true
+        }
+      ],
+      "tool_invocations": 2,
+      "tool_failures": 0,
+      "evidence_validation_failures": 0,
+      "timings": {
+        "total_task_duration": {
+          "count": 1,
+          "mean_ms": 119.0607,
+          "median_ms": 119.0607,
+          "p90_ms": 119.0607,
+          "p95_ms": 119.0607,
+          "min_ms": 119.0607,
+          "max_ms": 119.0607
+        },
+        "planner_model_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "worker_model_time": {
+          "count": 4,
+          "mean_ms": 7.2545,
+          "median_ms": 5.511,
+          "p90_ms": 22.278,
+          "p95_ms": 22.278,
+          "min_ms": 0.597,
+          "max_ms": 22.278
+        },
+        "tool_execution_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "evidence_validation_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "finding_validation_time": {
+          "count": 1,
+          "mean_ms": 12.5522,
+          "median_ms": 12.5522,
+          "p90_ms": 12.5522,
+          "p95_ms": 12.5522,
+          "min_ms": 12.5522,
+          "max_ms": 12.5522
+        }
+      },
+      "model_usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "provider_errors": 0,
+        "usage_metadata_available": false
+      },
+      "dedup": {
+        "submissions": 2,
+        "new": 2,
+        "duplicates": 0,
+        "evidence_attachments": 0,
+        "conflicts": 0,
+        "errors": 0
+      }
+    },
+    {
+      "case_id": "hardening_unconfirmed_no_finding",
+      "task_id": "3",
+      "status": "completed",
+      "cm": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "metrics": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "precision": 0,
+        "recall": 0,
+        "f1": 0,
+        "specificity": 0,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0,
+        "accuracy": 0,
+        "case_completion_rate": 0,
+        "evidence_validity_rate": 0,
+        "findings_without_evidence": 0,
+        "evidence_valid_findings": 0,
+        "evidence_invalid_findings": 0,
+        "evidence_unknown_findings": 0,
+        "findings_total": 0,
+        "finding_evidence_coverage": 0,
+        "expected_findings": 0,
+        "actual_findings": 0
+      },
+      "match_result": {
+        "matched": [],
+        "unmatched_expected": null,
+        "unmatched_actual": null
+      },
+      "actual_findings": null,
+      "tool_invocations": 0,
+      "tool_failures": 0,
+      "evidence_validation_failures": 0,
+      "timings": {
+        "total_task_duration": {
+          "count": 1,
+          "mean_ms": 112.9334,
+          "median_ms": 112.9334,
+          "p90_ms": 112.9334,
+          "p95_ms": 112.9334,
+          "min_ms": 112.9334,
+          "max_ms": 112.9334
+        },
+        "planner_model_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "worker_model_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "tool_execution_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "evidence_validation_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "finding_validation_time": {
+          "count": 1,
+          "mean_ms": 7.4134,
+          "median_ms": 7.4134,
+          "p90_ms": 7.4134,
+          "p95_ms": 7.4134,
+          "min_ms": 7.4134,
+          "max_ms": 7.4134
+        }
+      },
+      "model_usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "provider_errors": 0,
+        "usage_metadata_available": false
+      },
+      "dedup": {
+        "submissions": 0,
+        "new": 0,
+        "duplicates": 0,
+        "evidence_attachments": 0,
+        "conflicts": 0,
+        "errors": 0
+      }
+    },
+    {
+      "case_id": "hardening_repeat_evidence_dedup",
+      "task_id": "4",
+      "status": "completed",
+      "cm": {
+        "tp": 1,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "metrics": {
+        "tp": 1,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "specificity": 0,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0,
+        "accuracy": 1,
+        "case_completion_rate": 0,
+        "evidence_validity_rate": 0,
+        "findings_without_evidence": 1,
+        "evidence_valid_findings": 0,
+        "evidence_invalid_findings": 0,
+        "evidence_unknown_findings": 0,
+        "findings_total": 1,
+        "finding_evidence_coverage": 0,
+        "expected_findings": 1,
+        "actual_findings": 1
+      },
+      "match_result": {
+        "matched": [
+          {
+            "expected": {
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (id)",
+              "severity": "high",
+              "evidence_required": false
+            },
+            "actual": {
+              "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+              "node_id": 13,
+              "finding_id": 5,
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (id)",
+              "severity": "high",
+              "worker": "work#2",
+              "evidence_state": "none",
+              "evidence_has_body": true
+            }
+          }
+        ],
+        "unmatched_expected": null,
+        "unmatched_actual": null
+      },
+      "actual_findings": [
+        {
+          "fingerprint": "sqli\u0000blind sql injection (id)\u0000high",
+          "node_id": 13,
+          "finding_id": 5,
+          "vuln_class": "SQLi",
+          "name": "Blind SQL Injection (id)",
+          "severity": "high",
+          "worker": "work#2",
+          "evidence_state": "none",
+          "evidence_has_body": true
+        }
+      ],
+      "tool_invocations": 2,
+      "tool_failures": 0,
+      "evidence_validation_failures": 0,
+      "timings": {
+        "total_task_duration": {
+          "count": 1,
+          "mean_ms": 128.7457,
+          "median_ms": 128.7457,
+          "p90_ms": 128.7457,
+          "p95_ms": 128.7457,
+          "min_ms": 128.7457,
+          "max_ms": 128.7457
+        },
+        "planner_model_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "worker_model_time": {
+          "count": 4,
+          "mean_ms": 13.3355,
+          "median_ms": 15.008,
+          "p90_ms": 29.25,
+          "p95_ms": 29.25,
+          "min_ms": 1.285,
+          "max_ms": 29.25
+        },
+        "tool_execution_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "evidence_validation_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "finding_validation_time": {
+          "count": 1,
+          "mean_ms": 8.2769,
+          "median_ms": 8.2769,
+          "p90_ms": 8.2769,
+          "p95_ms": 8.2769,
+          "min_ms": 8.2769,
+          "max_ms": 8.2769
+        }
+      },
+      "model_usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "provider_errors": 0,
+        "usage_metadata_available": false
+      },
+      "dedup": {
+        "submissions": 2,
+        "new": 1,
+        "duplicates": 1,
+        "evidence_attachments": 0,
+        "conflicts": 0,
+        "errors": 0
+      }
+    },
+    {
+      "case_id": "hardening_mixed_vuln_classes",
+      "task_id": "5",
+      "status": "completed",
+      "cm": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "metrics": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "specificity": 0,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0,
+        "accuracy": 1,
+        "case_completion_rate": 0,
+        "evidence_validity_rate": 0,
+        "findings_without_evidence": 2,
+        "evidence_valid_findings": 0,
+        "evidence_invalid_findings": 0,
+        "evidence_unknown_findings": 0,
+        "findings_total": 2,
+        "finding_evidence_coverage": 0,
+        "expected_findings": 2,
+        "actual_findings": 2
+      },
+      "match_result": {
+        "matched": [
+          {
+            "expected": {
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (login)",
+              "severity": "high",
+              "evidence_required": false
+            },
+            "actual": {
+              "fingerprint": "sqli\u0000blind sql injection (login)\u0000high",
+              "node_id": 16,
+              "finding_id": 6,
+              "vuln_class": "SQLi",
+              "name": "Blind SQL Injection (login)",
+              "severity": "high",
+              "worker": "work#1",
+              "evidence_state": "none",
+              "evidence_has_body": true
+            }
+          },
+          {
+            "expected": {
+              "vuln_class": "SSTI",
+              "name": "Server-Side Template Injection (eval)",
+              "severity": "high",
+              "evidence_required": false
+            },
+            "actual": {
+              "fingerprint": "ssti\u0000server-side template injection (eval)\u0000high",
+              "node_id": 17,
+              "finding_id": 7,
+              "vuln_class": "SSTI",
+              "name": "Server-Side Template Injection (eval)",
+              "severity": "high",
+              "worker": "work#1",
+              "evidence_state": "none",
+              "evidence_has_body": true
+            }
+          }
+        ],
+        "unmatched_expected": null,
+        "unmatched_actual": null
+      },
+      "actual_findings": [
+        {
+          "fingerprint": "sqli\u0000blind sql injection (login)\u0000high",
+          "node_id": 16,
+          "finding_id": 6,
+          "vuln_class": "SQLi",
+          "name": "Blind SQL Injection (login)",
+          "severity": "high",
+          "worker": "work#1",
+          "evidence_state": "none",
+          "evidence_has_body": true
+        },
+        {
+          "fingerprint": "ssti\u0000server-side template injection (eval)\u0000high",
+          "node_id": 17,
+          "finding_id": 7,
+          "vuln_class": "SSTI",
+          "name": "Server-Side Template Injection (eval)",
+          "severity": "high",
+          "worker": "work#1",
+          "evidence_state": "none",
+          "evidence_has_body": true
+        }
+      ],
+      "tool_invocations": 2,
+      "tool_failures": 0,
+      "evidence_validation_failures": 0,
+      "timings": {
+        "total_task_duration": {
+          "count": 1,
+          "mean_ms": 155.7133,
+          "median_ms": 155.7133,
+          "p90_ms": 155.7133,
+          "p95_ms": 155.7133,
+          "min_ms": 155.7133,
+          "max_ms": 155.7133
+        },
+        "planner_model_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "worker_model_time": {
+          "count": 4,
+          "mean_ms": 7.077,
+          "median_ms": 8.817,
+          "p90_ms": 11.679,
+          "p95_ms": 11.679,
+          "min_ms": 0.399,
+          "max_ms": 11.679
+        },
+        "tool_execution_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "evidence_validation_time": {
+          "count": 0,
+          "mean_ms": 0,
+          "median_ms": 0,
+          "p90_ms": 0,
+          "p95_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "finding_validation_time": {
+          "count": 1,
+          "mean_ms": 33.6258,
+          "median_ms": 33.6258,
+          "p90_ms": 33.6258,
+          "p95_ms": 33.6258,
+          "min_ms": 33.6258,
+          "max_ms": 33.6258
+        }
+      },
+      "model_usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "provider_errors": 0,
+        "usage_metadata_available": false
+      },
+      "dedup": {
+        "submissions": 2,
+        "new": 2,
+        "duplicates": 0,
+        "evidence_attachments": 0,
+        "conflicts": 0,
+        "errors": 0
+      }
+    }
+  ]
+}
