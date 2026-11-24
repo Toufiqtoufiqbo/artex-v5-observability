@@ -91,5 +91,32 @@ func datasetV5Hardening() []*Case {
 			}
 			return c
 		}(),
+		func() *Case {
+			c := base("hardening_traversal_confirmed", "detection_positive",
+				"Path traversal confirmed with a reproducible artifact (TP=1).",
+				[]ExpectedFinding{{VulnClass: "Traversal", Name: "Path Traversal (etc/passwd)", Severity: "medium"}})
+			c.Script = []ScriptResponse{
+				reportFindingScript("Traversal", "Path Traversal (etc/passwd)", "medium", "遍历读取系统文件", "触发：`GET /download?file=../../etc/passwd` HTTP/1.1 200，响应体含 root:x:0:0: 行", "http_diff"),
+				textScript("已结束。"),
+			}
+			return c
+		}(),
+		func() *Case {
+			c := base("hardening_error_sqli_distinct", "detection_positive",
+				"Error-based SQLi is a distinct finding from boolean SQLi (TP=1).",
+				[]ExpectedFinding{{VulnClass: "SQLi", Name: "Error-Based SQL Injection", Severity: "high"}})
+			c.Script = []ScriptResponse{
+				reportFindingScript("SQLi", "Error-Based SQL Injection", "high", "报错注入", "触发：`GET /v?id=1'` HTTP/1.1 500，响应体含 SQL syntax near 原始数据库报错", "http_diff"),
+				textScript("已结束。"),
+			}
+			return c
+		}(),
+		func() *Case {
+			c := base("hardening_idor_no_proof", "detection_negative",
+				"Suspected IDOR without reproduced cross-user access produces no finding (no FP).",
+				nil)
+			c.Script = []ScriptResponse{textScript("只观察到参数可枚举，但未拿到跨用户访问的复现证据。")}
+			return c
+		}(),
 	}
 }
