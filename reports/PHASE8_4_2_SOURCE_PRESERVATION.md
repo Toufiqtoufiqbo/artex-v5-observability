@@ -1,7 +1,7 @@
-# PHASE8_4_2 — SOURCE PRESERVATION
+# PHASE8_4_2 â€” SOURCE PRESERVATION
 
 Date: 2026-11-21
-Repo: `D:\pc\Disktop\New folder (2)\artex-original`
+Repo: `<REPO_ROOT>`
 
 Mandatory precondition: state, hashes, and a recoverable backup captured before any edit.
 
@@ -12,7 +12,7 @@ branch:  (detached HEAD)
 HEAD:    e6ec56999175509551a1e43a3ee3b053d0941bd9
 ```
 
-Full `git status --short` → `backups\phase8_4_2\git-status-short.txt`:
+Full `git status --short` â†’ `backups\phase8_4_2\git-status-short.txt`:
 
 ```
  M agent/tools.go
@@ -38,9 +38,9 @@ Full `git status --short` → `backups\phase8_4_2\git-status-short.txt`:
 ?? agent/tools_retest.go
 ```
 
-`git diff --binary` → `backups\phase8_4_2\git-diff-binary.txt`
-`git diff` (text) → `backups\phase8_4_2\git-diff.txt`
-Untracked list → `backups\phase8_4_2\untracked.txt`
+`git diff --binary` â†’ `backups\phase8_4_2\git-diff-binary.txt`
+`git diff` (text) â†’ `backups\phase8_4_2\git-diff.txt`
+Untracked list â†’ `backups\phase8_4_2\untracked.txt`
 
 ## 2. Hashes
 
@@ -50,20 +50,20 @@ Untracked list → `backups\phase8_4_2\untracked.txt`
 
 ```
 backups\phase8_4_2\
-├── BRANCH.txt
-├── HEAD.txt
-├── git-diff-binary.txt
-├── git-diff.txt
-├── git-status-short.txt
-├── task_scope.go
-├── agent-snapshot\           (71 files — pre-phase copy of agent/, including VIII.4.1 changes)
-├── phase-change-list.txt
-└── phase-change-hashes.txt
+â”œâ”€â”€ BRANCH.txt
+â”œâ”€â”€ HEAD.txt
+â”œâ”€â”€ git-diff-binary.txt
+â”œâ”€â”€ git-diff.txt
+â”œâ”€â”€ git-status-short.txt
+â”œâ”€â”€ task_scope.go
+â”œâ”€â”€ agent-snapshot\           (71 files â€” pre-phase copy of agent/, including VIII.4.1 changes)
+â”œâ”€â”€ phase-change-list.txt
+â””â”€â”€ phase-change-hashes.txt
 ```
 
 ## 4. VIII.4.1 changes preserved
 
-Verified: `agent/scopecheck.go` in the tree still contains the VIII.4.1 fail-closed implementation; `agent/scope_failclosed_test.go` present; `backups\phase8_4_2\agent-snapshot\scopecheck.go` matches the VIII.4.1 post-hash `FA8B8601…` (see hashes file).
+Verified: `agent/scopecheck.go` in the tree still contains the VIII.4.1 fail-closed implementation; `agent/scope_failclosed_test.go` present; `backups\phase8_4_2\agent-snapshot\scopecheck.go` matches the VIII.4.1 post-hash `FA8B8601â€¦` (see hashes file).
 
 ## 5. No destructive Git operations
 
@@ -71,7 +71,7 @@ Verified: `agent/scopecheck.go` in the tree still contains the VIII.4.1 fail-clo
 
 ## 6. Existing uncommitted changes preserved
 
-Post-phase `git status --short` still shows `M agent/tools.go` and `M agent/worker.go` — identical entries to the pre-phase capture (diff hashes unchanged, recorded above).
+Post-phase `git status --short` still shows `M agent/tools.go` and `M agent/worker.go` â€” identical entries to the pre-phase capture (diff hashes unchanged, recorded above).
 
 ## 7. Result
 

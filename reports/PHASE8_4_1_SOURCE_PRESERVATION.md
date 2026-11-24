@@ -1,7 +1,7 @@
-# PHASE8_4_1 — SOURCE PRESERVATION
+# PHASE8_4_1 â€” SOURCE PRESERVATION
 
 Date: 2026-11-21 (local, WAT/UTC+1)
-Repo: `D:\pc\Disktop\New folder (2)\artex-original`
+Repo: `<REPO_ROOT>`
 
 Mandatory precondition for this phase: capture branch, HEAD, full status, binary diff, untracked inventory, hashes of modified files, and a recoverable backup **before** any edit.
 
@@ -35,8 +35,8 @@ git status --short:
 ?? agent/tools_retest.go
 (+ further entries as reported by the tooling; complete copy: backups\phase8_4_1\git-status-short.txt)
 
-git diff --binary → backups\phase8_4_1\git-diff-binary.txt
-git ls-files --others --exclude-standard → backups\phase8_4_1\untracked.txt
+git diff --binary â†’ backups\phase8_4_1\git-diff-binary.txt
+git ls-files --others --exclude-standard â†’ backups\phase8_4_1\untracked.txt
 ```
 
 Full status, binary diff, and untracked list preserved as files under `backups\phase8_4_1\`.
@@ -54,13 +54,13 @@ Full status, binary diff, and untracked list preserved as files under `backups\p
 
 ```
 backups\phase8_4_1\
-├── HEAD.txt
-├── BRANCH.txt
-├── git-status-short.txt
-├── git-diff-binary.txt
-├── untracked.txt
-├── task_scope.go                     (pre-phase copy)
-└── agent-snapshot\                   (pre-phase copy of the whole agent/ package, 70 files)
+â”œâ”€â”€ HEAD.txt
+â”œâ”€â”€ BRANCH.txt
+â”œâ”€â”€ git-status-short.txt
+â”œâ”€â”€ git-diff-binary.txt
+â”œâ”€â”€ untracked.txt
+â”œâ”€â”€ task_scope.go                     (pre-phase copy)
+â””â”€â”€ agent-snapshot\                   (pre-phase copy of the whole agent/ package, 70 files)
 ```
 
 Backup integrity check performed: files exist and are readable (Get-ChildItem / Get-FileHash on the snapshot produced hashes consistent with the pre-phase state).
@@ -78,7 +78,7 @@ Both remain modified as before. No `git reset --hard`, `git clean`, `git checkou
 
 ## 5. Baseline archive untouched
 
-The published baseline tree was **not** modified in this phase (the phase's mission is "only the modified ARTEX v5 source tree is in scope"). Baseline SHA-256 `93AFBEC0…CD11E2` re-verified after the phase.
+The published baseline tree was **not** modified in this phase (the phase's mission is "only the modified ARTEX v5 source tree is in scope"). Baseline SHA-256 `93AFBEC0â€¦CD11E2` re-verified after the phase.
 
 ## 6. Result
 

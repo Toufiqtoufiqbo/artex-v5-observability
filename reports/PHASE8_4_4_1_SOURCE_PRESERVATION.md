@@ -1,20 +1,20 @@
-# PHASE8_4_4_1 — SOURCE PRESERVATION
+# PHASE8_4_4_1 â€” SOURCE PRESERVATION
 
 Date: 2026-11-21
-Repo: `D:\pc\Disktop\New folder (2)\artex-original`
+Repo: `<REPO_ROOT>`
 
 State captured before any modification.
 
 ```
 branch:  (detached HEAD)
 HEAD:    e6ec56999175509551a1e43a3ee3b053d0941bd9
-git status --short → backups\phase8_4_4_1\git-status-short.txt
-git diff --binary → backups\phase8_4_4_1\git-diff-binary.txt
-git diff → backups\phase8_4_4_1\git-diff.txt
-untracked → backups\phase8_4_4_1\untracked.txt
+git status --short â†’ backups\phase8_4_4_1\git-status-short.txt
+git diff --binary â†’ backups\phase8_4_4_1\git-diff-binary.txt
+git diff â†’ backups\phase8_4_4_1\git-diff.txt
+untracked â†’ backups\phase8_4_4_1\untracked.txt
 ```
 
-Phase VIII.4.1 → VIII.4.4 changes intact (verified via hashes vs VIII.4.4 PRE list).
+Phase VIII.4.1 â†’ VIII.4.4 changes intact (verified via hashes vs VIII.4.4 PRE list).
 
 ## Hashes (`backups\phase8_4_4_1\hashes.txt`)
 

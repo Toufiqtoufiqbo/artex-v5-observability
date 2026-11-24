@@ -1,7 +1,7 @@
-# PHASE8_4_3 — SOURCE PRESERVATION
+# PHASE8_4_3 â€” SOURCE PRESERVATION
 
 Date: 2026-11-21
-Repo: `D:\pc\Disktop\New folder (2)\artex-original`
+Repo: `<REPO_ROOT>`
 
 Pre-edit state captured before any modification.
 
@@ -12,14 +12,14 @@ branch:  (detached HEAD)
 HEAD:    e6ec56999175509551a1e43a3ee3b053d0941bd9
 ```
 
-`git status --short` → `backups\phase8_4_3\git-status-short.txt` (all VIII.4.1/2 changes intact).
-`git diff --binary` → `backups\phase8_4_3\git-diff-binary.txt`.
-`git diff` (text) → `backups\phase8_4_3\git-diff.txt` (pre-existing).
-Untracked list → `backups\phase8_4_3\untracked.txt`.
+`git status --short` â†’ `backups\phase8_4_3\git-status-short.txt` (all VIII.4.1/2 changes intact).
+`git diff --binary` â†’ `backups\phase8_4_3\git-diff-binary.txt`.
+`git diff` (text) â†’ `backups\phase8_4_3\git-diff.txt` (pre-existing).
+Untracked list â†’ `backups\phase8_4_3\untracked.txt`.
 
 ## 2. Hashes
 
-`backups\phase8_4_3\hashes.txt` — PRE hashes (tree state at Phase H start, i.e., after the VIII.4.3 implementation was in place), POST appended (post-build, same tree — no edits during Phase H).
+`backups\phase8_4_3\hashes.txt` â€” PRE hashes (tree state at Phase H start, i.e., after the VIII.4.3 implementation was in place), POST appended (post-build, same tree â€” no edits during Phase H).
 
 ```
 PRE 5F4DD8638CD2888BEF7856E8A312528AAF2C78B1E89ABB5AFDD3FF083DA7F0ED  agent\scopecheck.go

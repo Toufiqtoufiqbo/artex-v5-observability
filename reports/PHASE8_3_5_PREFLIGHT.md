@@ -1,4 +1,4 @@
-# PHASE8_3_5 — PREFLIGHT
+# PHASE8_3_5 â€” PREFLIGHT
 
 Date: 2026-11-21 (local, WAT/UTC+1)
 Scope: local-only. No external targets. Secrets redacted.
@@ -19,7 +19,7 @@ At the start of this phase **all four services were down** (`8888/8787/3004/5433
 
 Note: `pg_ctl` first started on the config default 5432; it was stopped and restarted with `-p 5433` to match the documented environment. This is an environment action, not a source change.
 
-Go toolchain: `go1.26.11 windows/amd64` (`D:\pc\Disktop\New folder (2)\go-install\go\bin\go.exe`).
+Go toolchain: `go1.26.11 windows/amd64` (`<GO_BIN>\go.exe`).
 
 ## 2. Isolation matrix
 
@@ -33,7 +33,7 @@ Go toolchain: `go1.26.11 windows/amd64` (`D:\pc\Disktop\New folder (2)\go-instal
 | Binary | `artex-baseline-8332.exe` (rebuilt) | `artex-original-embed-v5.exe` |
 | Admin user | `ARTEX` | `ARTEX` |
 
-Both databases were created fresh for this phase (`DROP DATABASE IF EXISTS` → `CREATE DATABASE`). Older databases (`artex`, `artex_base`) are **preserved untouched** for prior-phase evidence.
+Both databases were created fresh for this phase (`DROP DATABASE IF EXISTS` â†’ `CREATE DATABASE`). Older databases (`artex`, `artex_base`) are **preserved untouched** for prior-phase evidence.
 
 ## 3. Contamination discovered and corrected
 
@@ -41,7 +41,7 @@ The pre-existing modified database (`artex`) contained **79 tasks** and two left
 
 ```
 2026/11/21 20:37:22 [manager] reloaded 79 task(s) from PG
-2026/11/21 20:37:23 [worker work#1] task 223 领取意图 #1964
+2026/11/21 20:37:23 [worker work#1] task 223 é¢†å–æ„å›¾ #1964
 ...
 4458|216|worker|40284|15593|53|ok|2026-11-21 20:41:12
 ```
@@ -65,12 +65,12 @@ Applied via authenticated `POST /api/llm` (admin login first, API key supplied t
 
 ## 5. Agent/provider binding check
 
-`SELECT key,llm_profile_id FROM agents WHERE llm_profile_id IS NOT NULL;` → **0 rows** in both databases.
+`SELECT key,llm_profile_id FROM agents WHERE llm_profile_id IS NOT NULL;` â†’ **0 rows** in both databases.
 Therefore planner and workers resolve through `globalProvider()` (`server/task_llm.go:509`), i.e. exactly the configuration above. No hidden per-agent override.
 
 ## 6. Regression observed during setup
 
-On a **fresh** database, modified v5 rejects login with `403 {"error":"密码未初始化，请先设置密码"}` (password not initialized). The baseline binary has `ARTEX_ADMIN_PASSWORD` auto-init logic (`server/auth.go:36`), while the modified tree has **no** `ARTEX_ADMIN_PASSWORD` reference:
+On a **fresh** database, modified v5 rejects login with `403 {"error":"å¯†ç æœªåˆå§‹åŒ–ï¼Œè¯·å…ˆè®¾ç½®å¯†ç "}` (password not initialized). The baseline binary has `ARTEX_ADMIN_PASSWORD` auto-init logic (`server/auth.go:36`), while the modified tree has **no** `ARTEX_ADMIN_PASSWORD` reference:
 
 ```
 # baseline
@@ -93,9 +93,9 @@ For the pilot, modified v5 was initialised explicitly via `POST /api/auth/init` 
 
 | | Baseline | Modified |
 |---|---|---|
-| Source | `artex-global-main.zip` → extracted tree | `artex-original` git tree |
-| Archive SHA-256 | `93AFBEC089A9D8AB00AE1DA4918DFCAF3A99AF636C1303DAE514F4EBE7CD11E2` | — |
-| Archive size | 8,944,269 bytes | — |
+| Source | `artex-global-main.zip` â†’ extracted tree | `artex-original` git tree |
+| Archive SHA-256 | `93AFBEC089A9D8AB00AE1DA4918DFCAF3A99AF636C1303DAE514F4EBE7CD11E2` | â€” |
+| Archive size | 8,944,269 bytes | â€” |
 | Commit | **unverified** (no git metadata in archive) | `e6ec56999175509551a1e43a3ee3b053d0941bd9` (detached HEAD) |
 | Working tree | clean | modified + untracked (documented) |
 | Files / manifest SHA-256 | 794 / `1D7969A0D8487129613233175F03498E79F1840D65F220AEA6042FC86D5748DD` | 2120 / `4BF9796F7F773505FCFC17614021F4F8CF5E6302828C8ACC92348B8EA2EF204D` |

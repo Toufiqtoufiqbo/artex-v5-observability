@@ -1,7 +1,7 @@
-# PHASE8_4_4 — SOURCE PRESERVATION
+# PHASE8_4_4 â€” SOURCE PRESERVATION
 
 Date: 2026-11-21
-Repo: `D:\pc\Disktop\New folder (2)\artex-original`
+Repo: `<REPO_ROOT>`
 
 Pre-edit state captured at phase start.
 
@@ -10,10 +10,10 @@ Pre-edit state captured at phase start.
 ```
 branch:  (detached HEAD)
 HEAD:    e6ec56999175509551a1e43a3ee3b053d0941bd9
-git status --short → backups\phase8_4_4\git-status-short.txt
-git diff --binary → backups\phase8_4_4\git-diff-binary.txt
-git diff → backups\phase8_4_4\git-diff.txt
-untracked → backups\phase8_4_4\untracked.txt
+git status --short â†’ backups\phase8_4_4\git-status-short.txt
+git diff --binary â†’ backups\phase8_4_4\git-diff-binary.txt
+git diff â†’ backups\phase8_4_4\git-diff.txt
+untracked â†’ backups\phase8_4_4\untracked.txt
 ```
 
 VIII.4.1/2/3 changes intact (verified byte-identical via hashes; see `hashes.txt`).
