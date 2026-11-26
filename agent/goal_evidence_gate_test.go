@@ -32,6 +32,7 @@ func TestGateGoalEvidence(t *testing.T) {
 	cases := []struct {
 		name    string
 		node    *db.Node
+		taskID  int64
 		wantErr string
 	}{
 		{
@@ -71,11 +72,29 @@ func TestGateGoalEvidence(t *testing.T) {
 			node:    nil,
 			wantErr: "missing",
 		},
+		{
+			name:    "inherited finding is not this task's proof",
+			node:    &db.Node{Kind: db.KindFinding, ID: 8, Inherited: true, SourceTaskID: 4},
+			taskID:  42,
+			wantErr: "another task",
+		},
+		{
+			name:    "finding from another task is not this task's proof",
+			node:    &db.Node{Kind: db.KindFinding, ID: 9, SourceTaskID: 4},
+			taskID:  42,
+			wantErr: "another task",
+		},
+		{
+			name:    "inherited fact is not this task's proof",
+			node:    &db.Node{Kind: db.KindFact, ID: 10, Inherited: true, SourceTaskID: 4, Payload: []byte(`{"summary":"x","detail":"GET /x returned HTTP/1.1 200"}`)},
+			taskID:  42,
+			wantErr: "another task",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := gateGoalEvidence(context.Background(), tc.node, nil, 0)
+			err := gateGoalEvidence(context.Background(), tc.node, nil, tc.taskID)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("expected evidence to pass, got %v", err)

@@ -1231,7 +1231,9 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 				EvidenceID json.RawMessage `json:"evidence_id"`
 				Reason     string          `json:"reason"`
 			}
-			_ = json.Unmarshal(in, &a)
+			if err := json.Unmarshal(in, &a); err != nil {
+				return actool.Errorf("prove_goal 参数无效: " + err.Error()), nil
+			}
 			goal, ev := pid(a.GoalID), pid(a.EvidenceID)
 			if goal == 0 || ev == 0 {
 				return actool.Errorf("goal_id 和 evidence_id 必填"), nil
@@ -1240,9 +1242,11 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 			if err != nil || goalNode == nil || goalNode.Kind != db.KindGoal {
 				return actool.Errorf("goal_id 必须是本任务的目标节点（关联任务目标只读）"), nil
 			}
-			evidenceNode, err := t.ts.GetNodeWithSources(ev)
+			// Proof is strictly task-local: source-task views are read-only and
+			// must not be usable as evidence for this task's goal.
+			evidenceNode, err := t.ts.GetNode(ev)
 			if err != nil || evidenceNode == nil || (evidenceNode.Kind != db.KindFact && evidenceNode.Kind != db.KindFinding) {
-				return actool.Errorf("evidence_id 必须是本任务或直接关联任务的事实/漏洞节点"), nil
+				return actool.Errorf("evidence_id 必须是本任务的事实/漏洞节点（关联任务节点只读）"), nil
 			}
 			// Goal gate: a bare assertion is not proof. Findings pass; facts must
 			// carry a reproducible artifact (request/response, status, measured
@@ -1277,7 +1281,9 @@ func (t *ToolSet) goalMet() actool.CoreTool {
 		obj(map[string]any{"reason": str("达成理由（必须是目标真正达成的证据，不能是“本轮无新方向”这类结束本轮的理由）")}, "reason"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct{ Reason string }
-			_ = json.Unmarshal(in, &a)
+			if err := json.Unmarshal(in, &a); err != nil {
+				return actool.Errorf("goal_met 参数无效: " + err.Error()), nil
+			}
 			// goal_met used to end a task unconditionally. It is now a shortcut
 			// over already-proven goals, not an escape from evidence: either a
 			// finding exists or every goal carries artifact-backed proof.
@@ -1452,6 +1458,17 @@ func (t *ToolSet) recordOneFact(it factItem, defaultIntent int64) (int64, error)
 }
 
 func (t *ToolSet) recordFact() actool.CoreTool {
+	// Batch items must expose the same fields as the single-fact form; a bare
+	// {type:object} told the model nothing about what a fact may contain.
+	factProps := map[string]any{
+		"summary":      str("对本次探索结论的【总结性一句话】（是对 detail 的概括）"),
+		"intent_id":    idp("产生本事实的意图 id（你领到的意图；批量时作为各条默认）"),
+		"detail":       str("本事实的相关细节：把这次探索的多个观察事实都写进这里"),
+		"evidence":     str("【一行】关键证据：命令 + 最能证明结论的那一两行输出。务必简洁，不要粘大段输出（细节放 detail）。"),
+		"confidence":   str("observed（输出里直接看到）| inferred（据现象推断）。否定结论务必如实标注。"),
+		"asset_ids":    map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "相关资产 id（可选，0/1/多个）：该事实涉及哪些资产"},
+		"traffic_refs": HintTrafficSchema(),
+	}
 	return t.writeExpTool("record_fact", "把探索【事实/结论】写入探索图，连到产生它的意图（intent_id）。用于记录探索结果——包括指纹/枚举等【正向结论】，和'端口关闭'/'参数不可注入'/'未发现登录入口'等【否定结论】。\n"+
 		"⚠️一次探索的多个观察要【汇总成一条事实】，不要拆成多条，可以合并成一条事实的就尽量用一条事实表示：summary=对本次结论的总结性一句话，detail=相关细节（可含多个具体项）。例：指纹意图→一条事实 {summary:'识别了 X 站点的技术栈与响应特征', detail:'nginx 1.25 / Vue3 / 200 / title=.. / body_len=..'}，而不是状态码、指纹、标题各记一条。一条意图通常只产出一条事实，拆太碎会让图谱无限膨胀。\n"+
 		"★facts 数组用于一次写多条【彼此不同】的结论（每条可省略 intent_id，默认用顶层 intent_id）。返回 ids 数组，与 facts 等长同序。\n"+
@@ -1461,21 +1478,23 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 		"  · **否定类结论**（不可注入/端口关闭/未发现入口等）只写\"观察 + 试探性读法\"——陈述你实际看到什么，方向是否放弃由规划者综合全局定；务必给 evidence，手段没穷尽或证据弱（含只探一次、看起来像）标 inferred，确已穷尽且直接看到才标 observed。\n"+
 		"  · **用于 prove_goal 的 HTTP 事实**必须附 traffic_refs（traffic_search/traffic_get 返回的真实 id）或 evidence 中逐字引用已记录的请求行+状态行；prove_goal 会核验本任务的真实流量/工具结果，光有文字描述会被拒绝。",
 		obj(map[string]any{
-			"facts":        map[string]any{"type": "array", "description": "【有多条不同结论时用】事实数组，元素字段同下方顶层字段（summary/detail/evidence/confidence/intent_id/asset_ids/traffic_refs）；省略 intent_id 则用顶层 intent_id。返回 ids 与本数组等长、同序。", "items": map[string]any{"type": "object"}},
-			"summary":      str("对本次探索结论的【总结性一句话】（是对 detail 的概括）"),
-			"intent_id":    idp("产生本事实的意图 id（你领到的意图；批量时作为各条默认）"),
-			"detail":       str("本事实的相关细节：把这次探索的多个观察事实都写进这里"),
-			"evidence":     str("【一行】关键证据：命令 + 最能证明结论的那一两行输出。务必简洁，不要粘大段输出（细节放 detail）。"),
-			"confidence":   str("observed（输出里直接看到）| inferred（据现象推断）。否定结论务必如实标注。"),
-			"asset_ids":    map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "相关资产 id（可选，0/1/多个）：该事实涉及哪些资产"},
-			"traffic_refs": HintTrafficSchema(),
+			"facts":        map[string]any{"type": "array", "description": "【有多条不同结论时用】事实数组，元素字段同下方顶层字段（summary/detail/evidence/confidence/intent_id/asset_ids/traffic_refs）；省略 intent_id 则用顶层 intent_id。返回 ids 与本数组等长、同序。", "items": obj(factProps)},
+			"summary":      factProps["summary"],
+			"intent_id":    factProps["intent_id"],
+			"detail":       factProps["detail"],
+			"evidence":     factProps["evidence"],
+			"confidence":   factProps["confidence"],
+			"asset_ids":    factProps["asset_ids"],
+			"traffic_refs": factProps["traffic_refs"],
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				Facts    []factItem `json:"facts"`
 				factItem            // 单条模式 + 批量默认 intent_id
 			}
-			_ = json.Unmarshal(in, &a)
+			if err := json.Unmarshal(in, &a); err != nil {
+				return actool.Errorf("record_fact 参数无效: " + err.Error()), nil
+			}
 			batch := len(a.Facts) > 0
 			items := a.Facts
 			if !batch {

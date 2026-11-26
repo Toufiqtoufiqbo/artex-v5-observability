@@ -53,10 +53,17 @@ func FactEvidenceText(n *db.Node) string { return goalEvidenceText(n) }
 // are always applied; when the host wires an EvidenceVerifier, a fact must also
 // be corroborated by an artifact the process actually recorded (a real traffic
 // exchange, or a tool result in this task). Text alone can no longer prove a
-// goal. Findings pass because they already went through report_finding's gate.
+// goal. Findings pass because they already went through report_finding's gate,
+// but no node inherited from (or owned by) another task may prove this one.
 func gateGoalEvidence(ctx context.Context, n *db.Node, verifier EvidenceVerifier, taskID int64) error {
 	if n == nil {
 		return fmt.Errorf("evidence node is missing")
+	}
+	// A node read through a source-task view carries its owning task id. Neither
+	// inherited evidence nor a node from another task may prove this task's goal:
+	// that would let a finished source task satisfy an unrelated objective.
+	if n.Inherited || (n.SourceTaskID != 0 && n.SourceTaskID != taskID) {
+		return fmt.Errorf("evidence belongs to another task (source_task_id=%d, inherited=%t)", n.SourceTaskID, n.Inherited)
 	}
 	switch n.Kind {
 	case db.KindFinding:
