@@ -1243,6 +1243,12 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 			if err != nil || evidenceNode == nil || (evidenceNode.Kind != db.KindFact && evidenceNode.Kind != db.KindFinding) {
 				return actool.Errorf("evidence_id 必须是本任务或直接关联任务的事实/漏洞节点"), nil
 			}
+			// Goal gate: a bare assertion is not proof. Findings pass; facts must
+			// carry a reproducible artifact (request/response, status, measured
+			// delta or tool output) before they may prove a goal.
+			if gerr := gateGoalEvidence(evidenceNode); gerr != nil {
+				return actool.Errorf("prove_goal denied: " + gerr.Error()), nil
+			}
 			_ = t.ts.Link(ev, db.RelProves, goal)
 			_ = t.ts.SetNodeState(goal, "met")
 			// 每标记一个目标 met，就检查本任务是否【所有目标】都已 met；若是，自动判定
@@ -1271,6 +1277,17 @@ func (t *ToolSet) goalMet() actool.CoreTool {
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct{ Reason string }
 			_ = json.Unmarshal(in, &a)
+			// goal_met used to end a task unconditionally. It is now a shortcut
+			// over already-proven goals, not an escape from evidence: either a
+			// finding exists or every goal carries artifact-backed proof.
+			if t.ts == nil {
+				return actool.Errorf("goal_met denied: task store unavailable"), nil
+			}
+			findings, _ := t.ts.ListByKind(db.KindFinding, 1000)
+			goals, _ := t.ts.ListByKind(db.KindGoal, 1000)
+			if gerr := goalMetAllowed(findings, goals); gerr != nil {
+				return actool.Errorf("goal_met denied: " + gerr.Error()), nil
+			}
 			t.GoalMet = true
 			t.Reason = a.Reason
 			return actool.Text("acknowledged: goal marked met"), nil
