@@ -15,19 +15,31 @@ import (
 // satisfy prove_goal: doing so would let one task's evidence close another.
 func TestProveGoalUsesTaskLocalEvidenceOnly(t *testing.T) {
 	d := testDB(t)
-	defer d.Close()
+	// Registered first so LIFO cleanup closes the pool only after the task
+	// cleanups below have finished deleting rows.
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Errorf("close test database: %v", err)
+		}
+	})
 
 	source, err := d.CreateTask("[proof] source", "source goal", nil, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := d.DeleteTask(source.ID); err != nil {
+			t.Errorf("delete source task %d: %v", source.ID, err)
+		}
+	})
 	current, err := d.CreateTaskWithOptions("[proof] current", "current goal", db.TaskCreateOptions{SourceTaskIDs: []int64{source.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = d.DeleteTask(current.ID)
-		_ = d.DeleteTask(source.ID)
+		if err := d.DeleteTask(current.ID); err != nil {
+			t.Errorf("delete current task %d: %v", current.ID, err)
+		}
 	})
 
 	sourceFactID, err := d.Exploration(source.ExplorationID).AddNode(db.KindFact,

@@ -11,14 +11,23 @@ func TestHasToolResultAnchorRequiresSameSuccessfulResult(t *testing.T) {
 	if err != nil {
 		t.Skipf("postgres unavailable (%v) — skipping", err)
 	}
-	defer d.Close()
+	// Registered first so LIFO cleanup closes the pool after the row cleanup.
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Errorf("close test database: %v", err)
+		}
+	})
 	task, err := d.CreateTask("[goal-gate] activity anchor", "goal", nil, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		d.Exec(`DELETE FROM activity WHERE exploration_id=$1`, task.ExplorationID) //nolint:errcheck
-		d.DeleteTask(task.ID)                                                      //nolint:errcheck
+		if _, err := d.Exec(`DELETE FROM activity WHERE exploration_id=$1`, task.ExplorationID); err != nil {
+			t.Errorf("delete activity for task %d: %v", task.ID, err)
+		}
+		if err := d.DeleteTask(task.ID); err != nil {
+			t.Errorf("delete task %d: %v", task.ID, err)
+		}
 	})
 	ins := func(kind string, isError bool, detail string) {
 		t.Helper()
@@ -62,22 +71,34 @@ func TestActivityCitesTrafficIDIsTaskLocalAndExact(t *testing.T) {
 	if err != nil {
 		t.Skipf("postgres unavailable (%v) — skipping", err)
 	}
-	defer d.Close()
+	// Registered first so LIFO cleanup closes the pool after the row cleanups.
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Errorf("close test database: %v", err)
+		}
+	})
 
+	cleanTask := func(task *Task) {
+		t.Helper()
+		t.Cleanup(func() {
+			if _, err := d.Exec(`DELETE FROM activity WHERE exploration_id=$1`, task.ExplorationID); err != nil {
+				t.Errorf("delete activity for task %d: %v", task.ID, err)
+			}
+			if err := d.DeleteTask(task.ID); err != nil {
+				t.Errorf("delete task %d: %v", task.ID, err)
+			}
+		})
+	}
 	current, err := d.CreateTask("[traffic-ref] current", "goal", nil, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanTask(current)
 	other, err := d.CreateTask("[traffic-ref] other", "goal", nil, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		for _, task := range []*Task{current, other} {
-			_, _ = d.Exec(`DELETE FROM activity WHERE exploration_id=$1`, task.ExplorationID)
-			_ = d.DeleteTask(task.ID)
-		}
-	})
+	cleanTask(other)
 
 	const id = "1760000000-0007"
 	const otherID = "1760000000-9999"
@@ -120,14 +141,23 @@ func TestActivityCitesTrafficIDInMetadata(t *testing.T) {
 	if err != nil {
 		t.Skipf("postgres unavailable (%v) — skipping", err)
 	}
-	defer d.Close()
+	// Registered first so LIFO cleanup closes the pool after the row cleanup.
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Errorf("close test database: %v", err)
+		}
+	})
 	task, err := d.CreateTask("[traffic-ref] metadata", "goal", nil, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = d.Exec(`DELETE FROM activity WHERE exploration_id=$1`, task.ExplorationID)
-		_ = d.DeleteTask(task.ID)
+		if _, err := d.Exec(`DELETE FROM activity WHERE exploration_id=$1`, task.ExplorationID); err != nil {
+			t.Errorf("delete activity for task %d: %v", task.ID, err)
+		}
+		if err := d.DeleteTask(task.ID); err != nil {
+			t.Errorf("delete task %d: %v", task.ID, err)
+		}
 	})
 	if _, err := d.Exec(`INSERT INTO activity(exploration_id,kind,tool,detail,metadata) VALUES($1,'tool_use','traffic_get','open',$2::jsonb)`,
 		task.ExplorationID, `{"args":{"traffic_id":"1760000000-0042"}}`); err != nil {
