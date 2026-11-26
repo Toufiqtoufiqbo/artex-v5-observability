@@ -216,6 +216,11 @@ func (e *Engine) settleTask(ctx context.Context, t *Task) {
 		status = "done"
 	}
 	won, err := e.m.SetTaskStatusGuarded(t.ID, status)
+	if won {
+		if n, perr := strconv.ParseInt(t.ID, 10, 64); perr == nil {
+			agent.ClearTaskScopeForTask(n)
+		}
+	}
 	switch {
 	case err != nil:
 		log.Printf("[deadline] task %s 落终态失败: %v", t.ID, err)

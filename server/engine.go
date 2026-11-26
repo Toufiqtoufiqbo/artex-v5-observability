@@ -863,6 +863,7 @@ func (e *Engine) plannerLoop(ctx context.Context, t *Task) {
 				if won, err := e.m.SetTaskStatusGuarded(t.ID, "done"); err != nil {
 					log.Printf("[goalless] task %s 收尾落 done 失败: %v", t.ID, err)
 				} else if won {
+					if n, perr := strconv.ParseInt(t.ID, 10, 64); perr == nil { agent.ClearTaskScopeForTask(n) }
 					e.emitActivity(t, db.Activity{Worker: "system", Kind: "text",
 						Summary: "目标已全部达成，直投意图已执行完毕，任务结束"})
 				}
@@ -907,6 +908,7 @@ func (e *Engine) plannerLoop(ctx context.Context, t *Task) {
 				log.Printf("[planner] task %s 标记完成落库失败: %v", t.ID, err)
 			}
 			emitEngineTaskSettled(t, "completed", "")
+			if n, perr := strconv.ParseInt(t.ID, 10, 64); perr == nil { agent.ClearTaskScopeForTask(n) }
 			// 任务已判完成 → 立刻取消在跑的 worker：它们手头的意图跑出来也没意义了。
 			// 下一轮 worker 循环撞终态门就不再领新意图;被取消的这批走下方"任务已完成"分支
 			// 归为 stopped(而非 blocked)。
@@ -1280,3 +1282,4 @@ func (e *Engine) claimNext(t *Task, name string) *db.Node {
 	}
 	return nil
 }
+

@@ -372,16 +372,9 @@ func (w *Worker) execute(ctx context.Context, name string, taskID int64, as *db.
 	// company). Without it doHTTP refuses to send any request at all.
 	// VIII.4.2 — per-task storage: the scope is keyed by this task's id, is
 	// dropped when the run ends, and cannot be inherited by another task.
-	if as != nil {
-		if scopes, err := as.ListTaskScopeWithSources(taskID); err == nil && len(scopes) > 0 {
-			SetTaskScopeForTask(taskID, scopes)
-		} else {
-			ClearTaskScopeForTask(taskID)
-		}
-	} else {
-		ClearTaskScopeForTask(taskID)
-	}
-	defer ClearTaskScopeForTask(taskID)
+	// Seeding is per task, not per run: the scope stays available to the
+	// planner and to later workers until the task reaches a terminal state.
+	SeedTaskScopeFromStore(as, taskID)
 	tsx.SetOwnerNode(intent.ID)         // assets this worker discovers anchor to its intent → visible to the task
 	tsx.SetEnrich(enr)                  // async DNS/HTTP auto-completion for assets this worker writes
 	tsx.SetNotifyFinding(notifyFinding) // report_finding 落库时当场唤醒 planner，带上「哪个意图+finding」

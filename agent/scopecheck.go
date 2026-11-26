@@ -129,6 +129,24 @@ func ClearTaskScope() { clearScope("") }
 // can leak into a later task reusing this Worker.
 func ClearTaskScopeForTask(taskID int64) { clearScope(scopeKeyForTask(taskID)) }
 
+// SeedTaskScopeFromStore loads a task's declared scope into the in-memory
+// per-task store. Every agent that may send network traffic for the task must
+// call this before running: the store is keyed per task and is no longer
+// dropped when an individual worker exits, otherwise a worker finishing would
+// revoke the planner's authorization mid-task ("no target scope is configured").
+func SeedTaskScopeFromStore(as *db.AssetStore, taskID int64) {
+	if as == nil {
+		ClearTaskScopeForTask(taskID)
+		return
+	}
+	scopes, err := as.ListTaskScopeWithSources(taskID)
+	if err != nil || len(scopes) == 0 {
+		ClearTaskScopeForTask(taskID)
+		return
+	}
+	SetTaskScopeForTask(taskID, scopes)
+}
+
 // CheckScope validates the destination of rawURL against the legacy global
 // store (key ""). VIII.4.2 production paths go through CheckScopeForTask.
 func CheckScope(rawURL string) error { return CheckScopeForKey("", rawURL) }
