@@ -430,6 +430,21 @@ func quotaAwareHTTPClientWithPolicy(proxy, sessionHeaderKey, baseURL string, pol
 	transport.MaxIdleConnsPerHost = 0
 	transport.ForceAttemptHTTP2 = false
 	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	// Clearing TLSNextProto only stops net/http from wiring its HTTP/2 handler; it
+	// does not undo an ALPN already sitting in the cloned TLSClientConfig. Once
+	// http.DefaultTransport has served a request, its TLS config advertises "h2",
+	// and Clone copies that: the peer then negotiates HTTP/2 while this transport
+	// parses the stream as HTTP/1.x ("malformed HTTP response" with binary
+	// SETTINGS frames). Pin ALPN to http/1.1 so the wire protocol matches the
+	// handler that is actually installed.
+	tlsCfg := transport.TLSClientConfig
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{}
+	} else {
+		tlsCfg = tlsCfg.Clone()
+	}
+	tlsCfg.NextProtos = []string{"http/1.1"}
+	transport.TLSClientConfig = tlsCfg
 	proxy = strings.TrimSpace(proxy)
 	if proxy == "" {
 		transport.Proxy = nil // 留空=直连,不回退 HTTP_PROXY/HTTPS_PROXY 环境变量

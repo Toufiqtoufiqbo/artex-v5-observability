@@ -275,3 +275,55 @@ func TestProviderClient_ProxyModeFailsClosed(t *testing.T) {
 		t.Fatalf("provider proxy mode must fail closed at construction, got err=%v", err)
 	}
 }
+
+// TestProviderClient_PinsALPNToHTTP11 — clearing TLSNextProto does not undo an
+// ALPN list inherited from http.DefaultTransport. Once the default transport has
+// served a request its TLS config advertises "h2", and Clone copies that: the
+// peer negotiates HTTP/2 while this transport parses the wire as HTTP/1.x
+// ("malformed HTTP response" with binary SETTINGS frames). The provider
+// transport must pin ALPN to http/1.1 no matter what the cloned config says.
+func TestProviderClient_PinsALPNToHTTP11(t *testing.T) {
+	resetTrustedProviderPolicy(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	SetTrustedProviderPolicy(policyForServer(t, srv.URL), true)
+
+	def, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("default transport is %T", http.DefaultTransport)
+	}
+	prev := def.TLSClientConfig
+	def.TLSClientConfig = &tls.Config{NextProtos: []string{"h2", "http/1.1"}}
+	t.Cleanup(func() { def.TLSClientConfig = prev })
+
+	client, err := quotaAwareHTTPClient("", "", srv.URL)
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	check, ok := client.Transport.(providerEgressCheckTransport)
+	if !ok {
+		t.Fatalf("client transport is %T", client.Transport)
+	}
+	quota, ok := check.base.(quotaAwareTransport)
+	if !ok {
+		t.Fatalf("wrapped transport is %T", check.base)
+	}
+	base, ok := quota.base.(*http.Transport)
+	if !ok {
+		t.Fatalf("quota transport base is %T", quota.base)
+	}
+	if base.TLSClientConfig == nil {
+		t.Fatal("provider TLS config is nil")
+	}
+	if got := base.TLSClientConfig.NextProtos; len(got) != 1 || got[0] != "http/1.1" {
+		t.Fatalf("provider ALPN must be pinned to http/1.1, got %v", got)
+	}
+	if base.ForceAttemptHTTP2 {
+		t.Fatal("provider transport must not attempt HTTP/2")
+	}
+	if base.TLSNextProto == nil {
+		t.Fatal("provider HTTP/2 handler map must be cleared, not nil")
+	}
+}
