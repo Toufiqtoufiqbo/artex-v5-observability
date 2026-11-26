@@ -59,10 +59,13 @@ var (
 
 // SetTrustedProviderHosts replaces the operator trusted-provider host set.
 // Hosts are canonicalized (lowercase, trimmed); empty entries are ignored.
+// Loopback/private literals such as 127.0.0.1:8899 are accepted here because
+// listing them is an explicit operator opt-in for a local relay. Metadata
+// destinations are never accepted.
 func SetTrustedProviderHosts(hosts []string) {
 	m := make(map[string]struct{}, len(hosts))
 	for _, h := range hosts {
-		if s := canonicalProviderHost(h); s != "" && !providerHostForbidden(s) {
+		if s := canonicalProviderHost(h); s != "" && !providerMetadataForbidden(s) {
 			m[s] = struct{}{}
 		}
 	}
@@ -82,7 +85,7 @@ func SeedTrustedProviderHosts(hosts ...string) {
 	}
 	m := make(map[string]struct{}, len(hosts))
 	for _, h := range hosts {
-		if s := canonicalProviderHost(h); s != "" && !providerHostForbidden(s) {
+		if s := canonicalProviderHost(h); s != "" && !providerMetadataForbidden(s) {
 			m[s] = struct{}{}
 		}
 	}
@@ -93,19 +96,20 @@ func SeedTrustedProviderHosts(hosts ...string) {
 
 // TrustedProviderHostsFromEnv returns the operator trusted host set from
 // ARTEX_TRUSTED_PROVIDER_HOSTS (comma-separated "host" or "host:port"),
-// falling back to the host:port of ARTEX_LLM_BASE_URL when set. Entries that
-// name loopback, private, link-local or well-known metadata destinations are
-// discarded here — an operator may configure a provider base URL, but that
-// must not turn a cloud metadata service into a trusted provider identity.
+// falling back to the host:port of ARTEX_LLM_BASE_URL when set. Metadata
+// destinations are always discarded. Loopback/private entries in the explicit
+// operator list are accepted (a deliberate local relay opt-in); the fallback
+// derived from ARTEX_LLM_BASE_URL still drops private/metadata destinations by
+// default so merely configuring a base URL cannot create a trust root.
 func TrustedProviderHostsFromEnv() []string {
 	var out []string
 	for _, part := range strings.Split(os.Getenv("ARTEX_TRUSTED_PROVIDER_HOSTS"), ",") {
-		if s := strings.TrimSpace(part); s != "" && !providerHostForbidden(s) {
+		if s := strings.TrimSpace(part); s != "" && !providerMetadataForbidden(s) {
 			out = append(out, s)
 		}
 	}
 	if len(out) == 0 {
-		if host := canonicalProviderHost(urlHostName(os.Getenv("ARTEX_LLM_BASE_URL"))); host != "" && !providerHostForbidden(host) {
+		if host := canonicalProviderHost(urlHostName(os.Getenv("ARTEX_LLM_BASE_URL"))); host != "" && !providerHostDefaultDenied(host) {
 			if port := urlPortOf(os.Getenv("ARTEX_LLM_BASE_URL")); port != "" {
 				out = append(out, host+":"+port)
 			} else {
@@ -135,23 +139,22 @@ func canonicalProviderHost(h string) string {
 	return strings.ToLower(strings.TrimSpace(h))
 }
 
-// forbiddenProviderPrefixes covers destinations that are never legitimate
-// LLM provider endpoints: link-local (including 169.254.169.254 cloud metadata)
-// and the well-known vendor metadata IPs outside that range.
+// forbiddenProviderPrefixes covers metadata destinations that are never
+// legitimate LLM provider endpoints: link-local (including 169.254.169.254)
+// and well-known vendor metadata IPs outside that range.
 var forbiddenProviderPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("169.254.0.0/16"),
 	netip.MustParsePrefix("100.100.100.200/32"),
 	netip.MustParsePrefix("192.0.0.192/32"),
 }
 
-// providerIPForbidden reports whether ip is a non-routable or metadata
-// destination. These are denied even when an operator accidentally lists them
-// in ARTEX_TRUSTED_PROVIDER_HOSTS: a provider identity must be a public
-// endpoint, and a connection-test payload carries the real API key.
-func providerIPForbidden(ip netip.Addr) bool {
+// providerMetadataIPForbidden reports whether ip is a metadata/non-routable
+// address that must be denied unconditionally. Loopback and RFC1918 addresses
+// are deliberately NOT here: an operator may explicitly trust a local relay.
+func providerMetadataIPForbidden(ip netip.Addr) bool {
 	a := ip.Unmap()
-	if !a.IsValid() || a.IsUnspecified() || a.IsLoopback() || a.IsMulticast() ||
-		a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() || a.IsPrivate() {
+	if !a.IsValid() || a.IsUnspecified() || a.IsMulticast() ||
+		a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() {
 		return true
 	}
 	for _, p := range forbiddenProviderPrefixes {
@@ -162,23 +165,53 @@ func providerIPForbidden(ip netip.Addr) bool {
 	return false
 }
 
-// providerHostForbidden checks both literals and the well-known local names
-// before a host may enter the trusted set. Host:port entries are accepted by
-// splitting off the port first.
-func providerHostForbidden(host string) bool {
+// providerDefaultIPDenied reports whether ip is denied unless the operator
+// explicitly listed it as a trusted provider destination.
+func providerDefaultIPDenied(ip netip.Addr) bool {
+	a := ip.Unmap()
+	return providerMetadataIPForbidden(a) || a.IsLoopback() || a.IsPrivate()
+}
+
+// providerHostName reduces "host" or "host:port" to a canonical host name.
+func providerHostName(host string) string {
 	h := canonicalProviderHost(host)
 	name := h
 	if only, _, err := net.SplitHostPort(h); err == nil {
 		name = only
 	}
-	name = strings.ToLower(strings.Trim(name, "[]"))
+	return strings.ToLower(strings.Trim(name, "[]"))
+}
+
+// providerMetadataForbidden checks well-known metadata names and literals.
+// These destinations stay denied even if an operator mistakenly lists them;
+// connection-test requests carry the real provider API key.
+func providerMetadataForbidden(host string) bool {
+	name := providerHostName(host)
 	switch name {
-	case "", "localhost", "localhost.localdomain", "metadata", "metadata.google.internal",
-		"instance-data", "metadata.goog", "metadata.azure.com":
+	case "metadata", "metadata.google.internal", "instance-data", "metadata.goog",
+		"metadata.azure.com":
 		return true
 	}
 	if ip, err := netip.ParseAddr(name); err == nil {
-		return providerIPForbidden(ip)
+		return providerMetadataIPForbidden(ip)
+	}
+	return false
+}
+
+// providerHostDefaultDenied checks the fail-closed default: metadata,
+// loopback, private and other non-routable destinations are not trusted
+// implicitly. An explicit entry in the operator trusted set overrides this for
+// loopback/private hosts; metadata remains denied via providerMetadataForbidden.
+func providerHostDefaultDenied(host string) bool {
+	name := providerHostName(host)
+	if name == "localhost" || name == "localhost.localdomain" {
+		return true
+	}
+	if providerMetadataForbidden(host) {
+		return true
+	}
+	if ip, err := netip.ParseAddr(name); err == nil {
+		return providerDefaultIPDenied(ip)
 	}
 	return false
 }
@@ -243,7 +276,7 @@ func addressInProviderPrefixes(ip net.IP, prefixes []netip.Prefix) bool {
 func SetTrustedProviderPolicy(p ProviderEgressPolicy, enabled bool) {
 	providerEgressMu.Lock()
 	defer providerEgressMu.Unlock()
-	if !enabled || strings.TrimSpace(p.ExpectedHost) == "" {
+	if !enabled || strings.TrimSpace(p.ExpectedHost) == "" || providerMetadataForbidden(p.ExpectedHost) {
 		providerEgressTrusted = nil
 		return
 	}
@@ -268,9 +301,15 @@ func trustedProviderPolicyLoaded() *ProviderEgressPolicy {
 // empty host or an untrusted BaseURL denies all requests.
 func providerEgressPolicyFor(baseURL string) (ProviderEgressPolicy, bool) {
 	if p := trustedProviderPolicyLoaded(); p != nil {
+		if providerMetadataForbidden(p.ExpectedHost) {
+			return ProviderEgressPolicy{}, false
+		}
 		return *p, true
 	}
 	host := canonicalProviderHost(urlHostName(baseURL))
+	if host != "" && providerMetadataForbidden(host) {
+		return ProviderEgressPolicy{}, false
+	}
 	providerEgressMu.RLock()
 	restricted := len(providerTrustedHosts) > 0
 	_, trusted := providerTrustedHosts[host]
@@ -326,6 +365,9 @@ func CheckProviderEgress(req *http.Request, policy ProviderEgressPolicy) error {
 		return fmt.Errorf("provider egress: expected host missing (DENY)")
 	}
 	gotHost := strings.ToLower(req.URL.Hostname())
+	if providerMetadataForbidden(wantHost) || providerMetadataForbidden(gotHost) {
+		return fmt.Errorf("provider egress denied: metadata destinations are never allowed (DENY)")
+	}
 	if gotHost != wantHost {
 		return fmt.Errorf("provider egress denied: host %q not in policy (expected %q)", gotHost, wantHost)
 	}
@@ -380,7 +422,9 @@ func TrustedProviderHostsRestricted() bool {
 // NewProvider path, an EMPTY trusted set is NOT permissive here: this function
 // is the pre-flight used by /api/llm/test, which attaches the stored global API
 // key to a caller-supplied URL. No explicit operator trust → no request.
-// ok=false means the caller must not construct a provider for this BaseURL.
+// Loopback/private hosts are permitted only when explicitly present in the
+// trusted set; metadata destinations are never permitted. ok=false means the
+// caller must not construct a provider for this BaseURL.
 func ProviderPolicyForBaseURL(baseURL string) (ProviderEgressPolicy, bool) {
 	host := canonicalProviderHost(urlHostName(baseURL))
 	// An explicit trusted policy is independent of the user-supplied URL, so it
@@ -388,11 +432,14 @@ func ProviderPolicyForBaseURL(baseURL string) (ProviderEgressPolicy, bool) {
 	// trusted-policy path usable without turning a caller-supplied host into a
 	// trust root.
 	if p := trustedProviderPolicyLoaded(); p != nil {
+		if providerMetadataForbidden(p.ExpectedHost) {
+			return ProviderEgressPolicy{}, false
+		}
 		if host == "" || canonicalProviderHost(p.ExpectedHost) == host {
 			return *p, true
 		}
 	}
-	if host == "" || !validProviderHost(host) || providerHostForbidden(host) {
+	if host == "" || !validProviderHost(host) || providerMetadataForbidden(host) {
 		return ProviderEgressPolicy{}, false
 	}
 	port := urlPortOf(baseURL)
@@ -401,6 +448,9 @@ func ProviderPolicyForBaseURL(baseURL string) (ProviderEgressPolicy, bool) {
 	restricted := len(providerTrustedHosts) > 0
 	allowed := hostTrustedLocked(host, port)
 	providerEgressMu.RUnlock()
+	// hostTrustedLocked is the explicit operator opt-in, so an otherwise
+	// private/loopback host is authorized here. Unlisted hosts (including local
+	// ones) still fail closed, and metadata was rejected above.
 	if !restricted || !allowed {
 		return ProviderEgressPolicy{}, false
 	}
@@ -457,6 +507,9 @@ func providerPinnedDialWithResolver(policy ProviderEgressPolicy,
 		if wantHost == "" {
 			return nil, fmt.Errorf("provider egress: trusted host missing (DENY)")
 		}
+		if providerMetadataForbidden(wantHost) || providerMetadataForbidden(gotHost) {
+			return nil, fmt.Errorf("provider egress: metadata destinations are never allowed (DENY)")
+		}
 		if gotHost == "" || !validProviderHost(gotHost) || gotHost != wantHost {
 			return nil, fmt.Errorf("provider egress: dial host %q is not the trusted provider host %q (DENY)", host, policy.ExpectedHost)
 		}
@@ -485,6 +538,9 @@ func providerPinnedDialWithResolver(policy ProviderEgressPolicy,
 		for _, a := range addrs {
 			if a.IP == nil {
 				return nil, fmt.Errorf("provider egress: malformed DNS answer for %q (DENY)", wantHost)
+			}
+			if ipAddr, ok := netip.AddrFromSlice(a.IP); ok && providerMetadataIPForbidden(ipAddr) {
+				return nil, fmt.Errorf("provider egress: DNS answer %s is a metadata destination (DENY)", a.IP)
 			}
 			if !addressInProviderPrefixes(a.IP, policy.AllowedPrefixes) {
 				return nil, fmt.Errorf("provider egress: DNS answer %s for %q is not authorized (DENY)", a.IP, wantHost)

@@ -6,8 +6,9 @@ import (
 )
 
 // Security hardening regression tests: the connection-test pre-flight must
-// require explicit operator trust and must never authorize a local/metadata
-// destination, even if one appears in the operator list.
+// require explicit operator trust. Loopback/private destinations are allowed
+// only when the operator explicitly lists them (a local relay opt-in);
+// metadata destinations are never allowed, even when listed.
 
 func resetProviderTrustState(t *testing.T) {
 	t.Helper()
@@ -34,42 +35,101 @@ func TestProviderPolicyForBaseURLRequiresExplicitTrust(t *testing.T) {
 	}
 }
 
-func TestProviderPolicyForBaseURLRejectsPrivateDestinations(t *testing.T) {
+func TestProviderPolicyAllowsExplicitLocalRelayDeniesMetadata(t *testing.T) {
 	resetProviderTrustState(t)
 	SetTrustedProviderHosts([]string{
-		"127.0.0.1:8443", "169.254.169.254", "localhost", "api.example.com",
+		"127.0.0.1:8899", "10.0.0.5", "169.254.169.254", "metadata.google.internal", "api.example.com",
 	})
 	for _, u := range []string{
-		"https://127.0.0.1:8443/v1",
-		"http://169.254.169.254/latest/meta-data/",
-		"https://localhost/v1",
-		"https://metadata.google.internal/v1",
+		"http://127.0.0.1:8899/v1",   // explicitly trusted loopback relay
+		"http://10.0.0.5/v1",         // explicitly trusted private relay
+		"https://api.example.com/v1", // public host unchanged
 	} {
-		if _, ok := ProviderPolicyForBaseURL(u); ok {
-			t.Errorf("private/metadata destination must be denied: %q", u)
+		if _, ok := ProviderPolicyForBaseURL(u); !ok {
+			t.Errorf("explicitly trusted destination must be allowed: %q", u)
 		}
 	}
-	if _, ok := ProviderPolicyForBaseURL("https://api.example.com/v1"); !ok {
-		t.Fatal("public operator-trusted host must still be authorized")
+	for _, u := range []string{
+		"https://127.0.0.1:8898/v1",                // loopback, wrong port: not listed
+		"https://localhost/v1",                     // loopback name: not listed
+		"http://10.0.0.6/v1",                       // private host: not listed
+		"http://169.254.169.254/latest/meta-data/", // metadata: always denied
+		"https://metadata.google.internal/v1",      // metadata name: always denied
+		"http://100.100.100.200/latest/meta-data/", // vendor metadata: always denied
+	} {
+		if _, ok := ProviderPolicyForBaseURL(u); ok {
+			t.Errorf("unlisted private/metadata destination must be denied: %q", u)
+		}
 	}
 }
 
-func TestTrustedProviderHostsFromEnvDropsPrivateEntries(t *testing.T) {
+func TestTrustedProviderHostsAcceptExplicitLocalRelayButNeverMetadata(t *testing.T) {
 	resetProviderTrustState(t)
-	t.Setenv("ARTEX_TRUSTED_PROVIDER_HOSTS", "127.0.0.1:8443,169.254.169.254,api.example.com")
+	SetTrustedProviderHosts([]string{
+		"127.0.0.1:8899", "10.0.0.5", "169.254.169.254", "metadata.google.internal",
+	})
+	got := TrustedProviderHosts()
+	for _, want := range []string{"127.0.0.1:8899", "10.0.0.5"} {
+		if !hasHost(got, want) {
+			t.Errorf("explicit local relay %q missing from trusted hosts: %v", want, got)
+		}
+	}
+	for _, denied := range []string{"169.254.169.254", "metadata.google.internal"} {
+		if hasHost(got, denied) {
+			t.Errorf("metadata destination %q must never enter the trusted set: %v", denied, got)
+		}
+	}
+}
+
+func TestSeedTrustedProviderHostsAcceptsExplicitLocalRelayButNeverMetadata(t *testing.T) {
+	resetProviderTrustState(t)
+	SeedTrustedProviderHosts("127.0.0.1:8899", "10.0.0.5", "169.254.169.254")
+	got := TrustedProviderHosts()
+	if !hasHost(got, "127.0.0.1:8899") || !hasHost(got, "10.0.0.5") {
+		t.Fatalf("seeded local/private relay missing from trusted hosts: %v", got)
+	}
+	if hasHost(got, "169.254.169.254") {
+		t.Fatalf("metadata destination must never be seeded: %v", got)
+	}
+}
+
+func TestTrustedProviderHostsFromEnvKeepsLocalRelayDropsMetadata(t *testing.T) {
+	resetProviderTrustState(t)
+	t.Setenv("ARTEX_TRUSTED_PROVIDER_HOSTS", "127.0.0.1:8899,10.0.0.5,169.254.169.254,metadata.google.internal,api.example.com")
 	t.Setenv("ARTEX_LLM_BASE_URL", "")
 	got := TrustedProviderHostsFromEnv()
-	if len(got) != 1 || !strings.EqualFold(got[0], "api.example.com") {
-		t.Fatalf("trusted hosts = %v, want only [api.example.com]", got)
+	for _, want := range []string{"127.0.0.1:8899", "10.0.0.5", "api.example.com"} {
+		found := false
+		for _, h := range got {
+			if strings.EqualFold(h, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("explicit operator entry %q missing from env trusted hosts: %v", want, got)
+		}
+	}
+	for _, denied := range []string{"169.254.169.254", "metadata.google.internal"} {
+		for _, h := range got {
+			if strings.EqualFold(h, denied) {
+				t.Errorf("metadata destination %q must never enter env trusted hosts: %v", denied, got)
+			}
+		}
 	}
 }
 
 func TestTrustedProviderHostsFromEnvDropsPrivateBaseURLFallback(t *testing.T) {
 	resetProviderTrustState(t)
 	t.Setenv("ARTEX_TRUSTED_PROVIDER_HOSTS", "")
-	t.Setenv("ARTEX_LLM_BASE_URL", "http://169.254.169.254/latest/meta-data/")
-	if got := TrustedProviderHostsFromEnv(); len(got) != 0 {
-		t.Fatalf("metadata fallback was trusted: %v", got)
+	for _, baseURL := range []string{
+		"http://127.0.0.1:8899/v1",
+		"http://169.254.169.254/latest/meta-data/",
+	} {
+		t.Setenv("ARTEX_LLM_BASE_URL", baseURL)
+		if got := TrustedProviderHostsFromEnv(); len(got) != 0 {
+			t.Fatalf("private/metadata fallback was trusted from %q: %v", baseURL, got)
+		}
 	}
 }
 
@@ -84,5 +144,15 @@ func TestProviderPolicyHonorsExplicitTrustedPolicy(t *testing.T) {
 		if _, ok := ProviderPolicyForBaseURL(u); !ok {
 			t.Errorf("explicitly trusted policy must authorize %q", u)
 		}
+	}
+}
+
+func TestSetTrustedProviderPolicyRejectsMetadata(t *testing.T) {
+	resetProviderTrustState(t)
+	SetTrustedProviderPolicy(ProviderEgressPolicy{
+		ExpectedHost: "169.254.169.254", ExpectedPort: "80", ExpectedScheme: "http",
+	}, true)
+	if _, ok := ProviderPolicyForBaseURL("http://169.254.169.254/latest/meta-data/"); ok {
+		t.Fatal("a metadata destination must never be authorized by an explicit policy")
 	}
 }
