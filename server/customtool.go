@@ -131,19 +131,23 @@ func (s *Server) pgDeleteCustomTool(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"deleted": key})
 }
 
-// testToolReq is a dry-run request from the editor: run the given (possibly unsaved)
-// exec spec with sample params, without persisting the tool. Same executor path as a
-// real tool call — it runs arbitrary command/script/http on the server, which the
-// custom-tool feature already allows, so no new capability is granted.
+// testToolReq is a dry-run request from the editor. The exec spec is NEVER taken
+// from the request: only a saved custom tool may be exercised, so the endpoint
+// cannot be used to run an arbitrary unsaved command/script on the server.
+// Exec is still accepted in the JSON shape for compatibility with older forms
+// but is ignored.
 type testToolReq struct {
-	Kind   string          `json:"kind"` // command | script | http
-	Exec   json.RawMessage `json:"exec"`
+	Key    string          `json:"key"` // key of a saved custom tool (required)
+	Kind   string          `json:"kind"`
+	Exec   json.RawMessage `json:"exec"` // ignored; kept for old clients
 	Params map[string]any  `json:"params"`
 }
 
-// pgTestCustomTool executes an exec spec once and returns its raw output + error
-// flag, so the editor can debug a tool before saving it. Per-kind timeouts still
-// apply from the exec spec (with defaults); the outer ceiling is a hard backstop.
+// pgTestCustomTool runs ONE saved custom tool with sample params and returns a
+// bounded output + error flag. Per-kind timeouts still apply from the saved exec
+// spec (with defaults); the outer ceiling is a hard backstop. HTTP dry runs are
+// additionally restricted to operator-allowlisted destinations and return a
+// sanitized body: the saved tool's headers may carry credentials.
 func (s *Server) pgTestCustomTool(w http.ResponseWriter, r *http.Request) {
 	pg := s.pg(w)
 	if pg == nil {
@@ -154,6 +158,24 @@ func (s *Server) pgTestCustomTool(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "无效的请求体")
 		return
 	}
+	key := strings.TrimSpace(req.Key)
+	if key == "" {
+		writeErr(w, 400, "测试仅支持已保存的自定义工具：请先保存后再测试")
+		return
+	}
+	row, err := pg.GetTool(key)
+	if err != nil {
+		writeErr(w, 500, "读取自定义工具失败")
+		return
+	}
+	if row == nil || row.System {
+		writeErr(w, 400, "只能测试已保存的自定义工具")
+		return
+	}
+	if row.Kind != req.Kind {
+		writeErr(w, 400, "工具类型与已保存的配置不一致")
+		return
+	}
 	params := req.Params
 	if params == nil {
 		params = map[string]any{}
@@ -162,13 +184,18 @@ func (s *Server) pgTestCustomTool(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	tc := &actool.ToolContext{WorkingDir: s.m.dir} // run in the project dir, like a real call
 	var res actool.Result
-	switch req.Kind {
+	switch row.Kind {
 	case "command":
-		res, _ = s.runCommandTool(ctx, req.Exec, params, tc)
+		res, _ = s.runCommandTool(ctx, row.Exec, params, tc)
 	case "script":
-		res, _ = s.runScriptTool(ctx, "test", req.Exec, params, tc)
+		res, _ = s.runScriptTool(ctx, row.Key, row.Exec, params, tc)
 	case "http":
-		res, _ = s.runHTTPTool(ctx, req.Exec, params, tc)
+		res, _ = s.runHTTPToolWith(ctx, row.Exec, params, tc, httpToolOptions{
+			targetCheck:   checkCustomToolHTTPTestTarget,
+			maxBody:       1 << 14,
+			sanitizeBody:  true,
+			genericErrors: true,
+		})
 	case "shell":
 		writeErr(w, 400, "shell 类型工具是 bash 环境声明，无可执行内容")
 		return
@@ -176,7 +203,13 @@ func (s *Server) pgTestCustomTool(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "未知工具类型: "+req.Kind)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"output": res.Flatten(), "is_error": res.IsError})
+	if res.IsError {
+		// Never echo a tool's raw error: it can contain the rendered command,
+		// a URL with credentials or a provider's response body.
+		writeJSON(w, 200, map[string]any{"output": "工具执行失败（详情已省略）", "is_error": true})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"output": res.Flatten(), "is_error": false})
 }
 
 // ---------- Python 解释器(检测 + 入库 + 覆盖) ----------
@@ -421,7 +454,20 @@ func execPython(ctx context.Context, interp, key, code string, params map[string
 
 // ---------- http:原生请求 + 代理 ----------
 
+// httpToolOptions tightens the executor for the dry-run endpoint; the normal
+// agent-facing saved-tool path keeps its existing behavior (maxBody only).
+type httpToolOptions struct {
+	targetCheck   func(string) error
+	maxBody       int
+	sanitizeBody  bool
+	genericErrors bool
+}
+
 func (s *Server) runHTTPTool(ctx context.Context, execRaw json.RawMessage, params map[string]any, tc *actool.ToolContext) (actool.Result, error) {
+	return s.runHTTPToolWith(ctx, execRaw, params, tc, httpToolOptions{maxBody: 1 << 20})
+}
+
+func (s *Server) runHTTPToolWith(ctx context.Context, execRaw json.RawMessage, params map[string]any, tc *actool.ToolContext, opts httpToolOptions) (actool.Result, error) {
 	var spec httpExec
 	_ = json.Unmarshal(execRaw, &spec)
 	method := strings.ToUpper(strings.TrimSpace(spec.Method))
@@ -432,6 +478,11 @@ func (s *Server) runHTTPTool(ctx context.Context, execRaw json.RawMessage, param
 	if strings.TrimSpace(rawURL) == "" {
 		return actool.Errorf("http url 为空"), nil
 	}
+	if opts.targetCheck != nil {
+		if err := opts.targetCheck(rawURL); err != nil {
+			return actool.Errorf("请求目标未被允许"), nil
+		}
+	}
 	var bodyReader io.Reader
 	if spec.Body != "" {
 		bodyReader = strings.NewReader(renderTemplate(spec.Body, params, identity))
@@ -440,6 +491,9 @@ func (s *Server) runHTTPTool(ctx context.Context, execRaw json.RawMessage, param
 	defer cancel()
 	req, err := http.NewRequestWithContext(runCtx, method, rawURL, bodyReader)
 	if err != nil {
+		if opts.genericErrors {
+			return actool.Errorf("请求构造失败"), nil
+		}
 		return actool.Errorf(err.Error()), nil
 	}
 	for k, v := range spec.Headers {
@@ -451,11 +505,22 @@ func (s *Server) runHTTPTool(ctx context.Context, execRaw json.RawMessage, param
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if opts.genericErrors {
+			return actool.Errorf("请求失败（详情已省略）"), nil
+		}
 		return actool.Errorf("请求失败: " + err.Error()), nil
 	}
 	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	out := map[string]any{"status": resp.StatusCode, "body": string(respBody)}
+	limit := opts.maxBody
+	if limit <= 0 {
+		limit = 1 << 20
+	}
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, int64(limit)))
+	body := string(respBody)
+	if opts.sanitizeBody {
+		body = sanitizeHTTPTestBody(body, limit)
+	}
+	out := map[string]any{"status": resp.StatusCode, "body": body}
 	b, _ := json.Marshal(out)
 	return actool.Text(actool.Capture(tc, string(b))), nil
 }

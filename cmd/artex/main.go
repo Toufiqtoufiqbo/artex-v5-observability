@@ -60,6 +60,13 @@ func run() int {
 	)
 	flag.Parse()
 
+	// The data dir is served by the workspace file manager. It must never be
+	// the base dir itself, or config.json / jwt.key become browsable.
+	if err := validateDataDir(*dataDir, config.BaseDir()); err != nil {
+		fmt.Fprintln(os.Stderr, "startup refused:", err)
+		return 1
+	}
+
 	// Benchmark subcommand (Phase IX.1): `artex benchmark list|validate|run|compare|report`.
 	// Runs the benchmark engine and exits without starting the backend.
 	if len(os.Args) > 1 && os.Args[1] == "benchmark" {

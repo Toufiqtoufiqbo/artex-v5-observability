@@ -92,19 +92,55 @@ func normalizeHeaders(headers map[string]string) (map[string]string, error) {
 	return out, nil
 }
 
+// newHTTPClient builds the transport for one MCP endpoint. TLS verification
+// bypass is only ever passed in from operator-controlled configuration by the
+// server package; the destination policy additionally guards redirects so a
+// trusted public host cannot bounce headers into a private network.
+func newHTTPClient(insecure bool, timeout time.Duration) *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	if insecure {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- operator opt-in
+	}
+	destMu.RLock()
+	restricted := destRestricted
+	destMu.RUnlock()
+	if restricted {
+		tr.DialContext = restrictedDial
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if err := validateDestination(req.URL.String()); err != nil {
+				return err
+			}
+			if len(via) > 0 {
+				prev := via[len(via)-1].URL
+				if !strings.EqualFold(prev.Hostname(), req.URL.Hostname()) || prev.Port() != req.URL.Port() {
+					req.Header = http.Header{} // never forward Authorization to a new destination
+				}
+			}
+			if len(via) >= 10 {
+				return fmt.Errorf("mcp: stopped after 10 redirects")
+			}
+			return nil
+		},
+	}
+}
+
 // New connects to a remote MCP endpoint and performs the initialize handshake.
 // headers are sent on every request (Authorization, custom API keys, …).
 // When insecure is true, TLS certificate verification is skipped so servers that
 // present a self-signed certificate can still be reached (issue #108).
 func New(ctx context.Context, server, url string, headers map[string]string, insecure bool) (*Client, error) {
+	if err := validateDestination(url); err != nil {
+		return nil, err
+	}
 	cleanHeaders, err := normalizeHeaders(headers)
 	if err != nil {
 		return nil, err
 	}
-	hc := &http.Client{Timeout: 120 * time.Second}
-	if insecure {
-		hc.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	}
+	hc := newHTTPClient(insecure, 120*time.Second)
 	c := &Client{
 		server:   server,
 		url:      url,
@@ -122,14 +158,14 @@ func New(ctx context.Context, server, url string, headers map[string]string, ins
 // announces a per-session POST /message endpoint, while JSON-RPC responses are
 // delivered asynchronously as SSE message events.
 func NewSSE(ctx context.Context, server, sseURL string, headers map[string]string, insecure bool) (*Client, error) {
+	if err := validateDestination(sseURL); err != nil {
+		return nil, err
+	}
 	cleanHeaders, err := normalizeHeaders(headers)
 	if err != nil {
 		return nil, err
 	}
-	hc := &http.Client{} // the SSE stream is intentionally long-lived.
-	if insecure {
-		hc.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	}
+	hc := newHTTPClient(insecure, 0) // the SSE stream is intentionally long-lived.
 	streamCtx, cancel := context.WithCancel(context.Background())
 	req, err := http.NewRequestWithContext(streamCtx, http.MethodGet, sseURL, nil)
 	if err != nil {
@@ -203,6 +239,11 @@ func readSSEEndpoint(r *bufio.Reader, base string) (string, error) {
 				return "", err
 			}
 			candidate = b.ResolveReference(u).String()
+		}
+		// The MCP server announces this endpoint itself; it must not be able
+		// to redirect our authenticated requests into a private network.
+		if err := validateDestination(candidate); err != nil {
+			return "", err
 		}
 		return candidate, nil
 	}
@@ -499,6 +540,9 @@ func (c *Client) legacyRoundTrip(ctx context.Context, body rpcRequest, expectRes
 			delete(c.pending, body.ID)
 			c.pendingMu.Unlock()
 		}()
+	}
+	if err := validateDestination(c.messageURL); err != nil {
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.messageURL, bytes.NewReader(data))
 	if err != nil {

@@ -33,9 +33,9 @@ import (
 // ProviderEgressPolicy describes the exact authorized provider destination.
 // Missing ExpectedHost → the policy denies all requests.
 type ProviderEgressPolicy struct {
-	ExpectedHost    string
-	ExpectedPort    string // "" → derived from scheme (443 https / 80 http)
-	ExpectedScheme  string // "" → "https"
+	ExpectedHost   string
+	ExpectedPort   string // "" → derived from scheme (443 https / 80 http)
+	ExpectedScheme string // "" → "https"
 	// AllowedPrefixes, when non-empty, restricts which resolved addresses the
 	// trusted provider host may be pinned to (VIII.4.6 Gate A3). Every DNS
 	// answer must fall inside at least one prefix; a mixed answer set is
@@ -62,7 +62,7 @@ var (
 func SetTrustedProviderHosts(hosts []string) {
 	m := make(map[string]struct{}, len(hosts))
 	for _, h := range hosts {
-		if s := canonicalProviderHost(h); s != "" {
+		if s := canonicalProviderHost(h); s != "" && !providerHostForbidden(s) {
 			m[s] = struct{}{}
 		}
 	}
@@ -82,7 +82,7 @@ func SeedTrustedProviderHosts(hosts ...string) {
 	}
 	m := make(map[string]struct{}, len(hosts))
 	for _, h := range hosts {
-		if s := canonicalProviderHost(h); s != "" {
+		if s := canonicalProviderHost(h); s != "" && !providerHostForbidden(s) {
 			m[s] = struct{}{}
 		}
 	}
@@ -93,16 +93,19 @@ func SeedTrustedProviderHosts(hosts ...string) {
 
 // TrustedProviderHostsFromEnv returns the operator trusted host set from
 // ARTEX_TRUSTED_PROVIDER_HOSTS (comma-separated "host" or "host:port"),
-// falling back to the host:port of ARTEX_LLM_BASE_URL when set.
+// falling back to the host:port of ARTEX_LLM_BASE_URL when set. Entries that
+// name loopback, private, link-local or well-known metadata destinations are
+// discarded here — an operator may configure a provider base URL, but that
+// must not turn a cloud metadata service into a trusted provider identity.
 func TrustedProviderHostsFromEnv() []string {
 	var out []string
 	for _, part := range strings.Split(os.Getenv("ARTEX_TRUSTED_PROVIDER_HOSTS"), ",") {
-		if s := strings.TrimSpace(part); s != "" {
+		if s := strings.TrimSpace(part); s != "" && !providerHostForbidden(s) {
 			out = append(out, s)
 		}
 	}
 	if len(out) == 0 {
-		if host := canonicalProviderHost(urlHostName(os.Getenv("ARTEX_LLM_BASE_URL"))); host != "" {
+		if host := canonicalProviderHost(urlHostName(os.Getenv("ARTEX_LLM_BASE_URL"))); host != "" && !providerHostForbidden(host) {
 			if port := urlPortOf(os.Getenv("ARTEX_LLM_BASE_URL")); port != "" {
 				out = append(out, host+":"+port)
 			} else {
@@ -130,6 +133,54 @@ func TrustedProviderHosts() []string {
 // therefore denied unless the policy names it exactly (conservative).
 func canonicalProviderHost(h string) string {
 	return strings.ToLower(strings.TrimSpace(h))
+}
+
+// forbiddenProviderPrefixes covers destinations that are never legitimate
+// LLM provider endpoints: link-local (including 169.254.169.254 cloud metadata)
+// and the well-known vendor metadata IPs outside that range.
+var forbiddenProviderPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("169.254.0.0/16"),
+	netip.MustParsePrefix("100.100.100.200/32"),
+	netip.MustParsePrefix("192.0.0.192/32"),
+}
+
+// providerIPForbidden reports whether ip is a non-routable or metadata
+// destination. These are denied even when an operator accidentally lists them
+// in ARTEX_TRUSTED_PROVIDER_HOSTS: a provider identity must be a public
+// endpoint, and a connection-test payload carries the real API key.
+func providerIPForbidden(ip netip.Addr) bool {
+	a := ip.Unmap()
+	if !a.IsValid() || a.IsUnspecified() || a.IsLoopback() || a.IsMulticast() ||
+		a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() || a.IsPrivate() {
+		return true
+	}
+	for _, p := range forbiddenProviderPrefixes {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// providerHostForbidden checks both literals and the well-known local names
+// before a host may enter the trusted set. Host:port entries are accepted by
+// splitting off the port first.
+func providerHostForbidden(host string) bool {
+	h := canonicalProviderHost(host)
+	name := h
+	if only, _, err := net.SplitHostPort(h); err == nil {
+		name = only
+	}
+	name = strings.ToLower(strings.Trim(name, "[]"))
+	switch name {
+	case "", "localhost", "localhost.localdomain", "metadata", "metadata.google.internal",
+		"instance-data", "metadata.goog", "metadata.azure.com":
+		return true
+	}
+	if ip, err := netip.ParseAddr(name); err == nil {
+		return providerIPForbidden(ip)
+	}
+	return false
 }
 
 // validProviderHost accepts only ASCII DNS-ish hostnames and IP literals.
@@ -325,23 +376,32 @@ func TrustedProviderHostsRestricted() bool {
 // ProviderPolicyForBaseURL computes the trusted egress policy for one provider
 // BaseURL from trusted configuration only (VIII.4.6 Gate B). A global trusted
 // policy is honored only when it names the same host; otherwise the BaseURL
-// host must be in the operator's trusted host set. ok=false means the caller
-// must not construct a provider for this BaseURL.
+// host must be in the operator's trusted host set. Unlike the legacy
+// NewProvider path, an EMPTY trusted set is NOT permissive here: this function
+// is the pre-flight used by /api/llm/test, which attaches the stored global API
+// key to a caller-supplied URL. No explicit operator trust → no request.
+// ok=false means the caller must not construct a provider for this BaseURL.
 func ProviderPolicyForBaseURL(baseURL string) (ProviderEgressPolicy, bool) {
 	host := canonicalProviderHost(urlHostName(baseURL))
-	if host == "" || !validProviderHost(host) {
+	// An explicit trusted policy is independent of the user-supplied URL, so it
+	// is honored first (including for an empty default BaseURL). This keeps the
+	// trusted-policy path usable without turning a caller-supplied host into a
+	// trust root.
+	if p := trustedProviderPolicyLoaded(); p != nil {
+		if host == "" || canonicalProviderHost(p.ExpectedHost) == host {
+			return *p, true
+		}
+	}
+	if host == "" || !validProviderHost(host) || providerHostForbidden(host) {
 		return ProviderEgressPolicy{}, false
 	}
 	port := urlPortOf(baseURL)
 	scheme := strings.ToLower(strings.TrimSpace(urlSchemeOf(baseURL)))
-	if p := trustedProviderPolicyLoaded(); p != nil && canonicalProviderHost(p.ExpectedHost) == host {
-		return *p, true
-	}
 	providerEgressMu.RLock()
 	restricted := len(providerTrustedHosts) > 0
 	allowed := hostTrustedLocked(host, port)
 	providerEgressMu.RUnlock()
-	if restricted && !allowed {
+	if !restricted || !allowed {
 		return ProviderEgressPolicy{}, false
 	}
 	return ProviderEgressPolicy{ExpectedHost: host, ExpectedPort: port, ExpectedScheme: scheme}, true

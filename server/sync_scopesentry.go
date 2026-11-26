@@ -55,7 +55,7 @@ func (s *Server) scopeSentryClient(ctx context.Context) (*mcphttp.Client, error)
 	if m.URL == "" {
 		return nil, fmt.Errorf("数据源 %s 未配置 URL，请先配置", scopeSentryMCPName)
 	}
-	return mcphttp.New(ctx, m.Name, m.URL, jsonStrMap(m.Env), m.Insecure)
+	return mcphttp.New(ctx, m.Name, m.URL, jsonStrMap(m.Env), operatorMCPInsecure(m))
 }
 
 // envHasValue reports whether the env/header map has any non-empty value
@@ -102,7 +102,7 @@ func (s *Server) syncSSStatus(w http.ResponseWriter, r *http.Request) {
 	if configured && m.Enabled {
 		ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
-		if cl, cerr := mcphttp.New(ctx, m.Name, m.URL, jsonStrMap(m.Env), m.Insecure); cerr == nil {
+		if cl, cerr := mcphttp.New(ctx, m.Name, m.URL, jsonStrMap(m.Env), operatorMCPInsecure(m)); cerr == nil {
 			if _, terr := cl.Tools(ctx); terr == nil {
 				resp["reachable"] = true
 			}
@@ -137,6 +137,10 @@ func (s *Server) syncSSDatasource(w http.ResponseWriter, r *http.Request) {
 		m = &db.MCPServer{Name: scopeSentryMCPName, Transport: "http", Env: json.RawMessage(`{"X-API-Key":""}`)}
 	}
 	if body.URL != "" {
+		if err := mcphttp.ValidateDestination(body.URL); err != nil {
+			writeErr(w, 400, "数据源 URL 不被允许")
+			return
+		}
 		m.URL = body.URL
 	}
 	if body.APIKey != "" {

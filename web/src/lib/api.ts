@@ -1097,7 +1097,9 @@ export const api = {
     t: Pick<Tool, "description" | "schema" | "agents" | "enabled" | "kind" | "exec" | "deferred">,
   ) => put<{ ok: boolean }>(`/tools/custom/${key}`, t),
   deleteCustomTool: (key: string) => del<{ deleted: string }>(`/tools/custom/${key}`),
-  testCustomTool: (body: { kind: string; exec: Record<string, unknown>; params: Record<string, unknown> }) =>
+  // The server only dry-runs a SAVED tool; `key` is required. `exec` is accepted
+  // for older backends but must never be relied on for unsaved previews.
+  testCustomTool: (body: { key: string; kind: string; params: Record<string, unknown> }) =>
     post<{ output: string; is_error: boolean }>("/tools/custom/test", body),
   detectPython: () => post<{ python_interpreter: string }>("/settings/python/detect", {}),
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -45,13 +46,44 @@ func validatePassword(pw string) string {
 	return ""
 }
 
+// enforceJWTKeyPerms makes an existing signing key owner-only. Passing a key
+// whose mode is group/world readable would let any local user forge admin
+// tokens. On Windows os.Chmod cannot express NTFS ACLs, so the best available
+// approximation is applied and startup continues (ACLs are managed by the OS).
+// Error messages intentionally omit the absolute path.
+func enforceJWTKeyPerms(path string) error {
+	if runtime.GOOS == "windows" {
+		_ = os.Chmod(path, 0o600)
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("jwt key stat failed: %w", err)
+	}
+	if info.Mode().Perm()&0o077 == 0 {
+		return nil
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("jwt key permissions cannot be restricted to owner-only: %w", err)
+	}
+	info, err = os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("jwt key stat failed after chmod: %w", err)
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("jwt key is group/world accessible after chmod")
+	}
+	return nil
+}
+
 // loadOrCreateJWTKey reads the 32-byte signing key from keyDir/jwt.key. keyDir is
 // the project base dir (next to the executable), NOT the browsable workspace root
 // (dataDir) — the signing key must never be listable/downloadable via the file
 // manager. Legacy installs kept it at dataDir/jwt.key; if present there and not yet
 // at the new location, it is migrated (key preserved, so sessions stay valid) and
 // the old file removed so it disappears from the workspace. On first run a random
-// key is generated and persisted.
+// key is generated and persisted. Paths are never logged: they may disclose the
+// installation layout to anyone reading /logs.
 func loadOrCreateJWTKey(keyDir, dataDir string) ([]byte, error) {
 	path := filepath.Join(keyDir, jwtKeyFilename)
 	// one-time migration out of the old in-workspace location.
@@ -59,13 +91,19 @@ func loadOrCreateJWTKey(keyDir, dataDir string) ([]byte, error) {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			if data, rerr := os.ReadFile(legacy); rerr == nil {
 				if werr := os.WriteFile(path, data, 0o600); werr == nil {
+					if perr := enforceJWTKeyPerms(path); perr != nil {
+						return nil, perr
+					}
 					_ = os.Remove(legacy)
-					log.Printf("[auth] JWT key 已从 %s 迁移到 %s（移出可浏览工作区）", legacy, path)
+					log.Printf("[auth] JWT key 已迁移出可浏览工作区（路径已省略）")
 				}
 			}
 		}
 	}
 	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) >= 32 {
+		if perr := enforceJWTKeyPerms(path); perr != nil {
+			return nil, perr
+		}
 		return []byte(strings.TrimSpace(string(data))), nil
 	}
 	buf := make([]byte, 32)
@@ -76,10 +114,13 @@ func loadOrCreateJWTKey(keyDir, dataDir string) ([]byte, error) {
 		}
 		buf[i] = keyChars[n.Int64()]
 	}
-	if err := os.WriteFile(path, buf, 0600); err != nil {
+	if err := os.WriteFile(path, buf, 0o600); err != nil {
 		return nil, fmt.Errorf("write jwt key: %w", err)
 	}
-	log.Printf("[auth] 新 JWT key 已写入 %s", path)
+	if perr := enforceJWTKeyPerms(path); perr != nil {
+		return nil, perr
+	}
+	log.Printf("[auth] 已生成新的 JWT signing key（路径已省略）")
 	return buf, nil
 }
 

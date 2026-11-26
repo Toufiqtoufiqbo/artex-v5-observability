@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Autumn-27/artex/db"
+	"github.com/Autumn-27/artex/mcphttp"
 	actool "github.com/Autumn-27/norma/tool"
 )
 
@@ -266,7 +267,7 @@ func mcpSchema(withID bool) map[string]any {
 		"env":       map[string]any{"type": "object", "description": "环境变量 {KEY:VALUE}"},
 		"url":       strParam("http/sse 的 URL"),
 		"enabled":   map[string]any{"type": "boolean", "description": "是否启用(默认 true)"},
-		"insecure":  map[string]any{"type": "boolean", "description": "http: 跳过 TLS 证书校验(自签证书时置 true, 默认 false)"},
+		"insecure":  map[string]any{"type": "boolean", "description": "只读：TLS 校验跳过仅由服务端 ARTEX_MCP_INSECURE_HOSTS 控制，工具传入值会被忽略"},
 	}
 	required := []string{"name", "transport"}
 	if withID {
@@ -281,13 +282,11 @@ func (a mcpToolInput) toDB() *db.MCPServer {
 	if a.Enabled != nil {
 		enabled = *a.Enabled
 	}
-	insecure := false
-	if a.Insecure != nil {
-		insecure = *a.Insecure
-	}
+	// TLS bypass is operator-only (ARTEX_MCP_INSECURE_HOSTS); a tool input or a
+	// stored row can never switch it on.
 	return &db.MCPServer{
 		ID: a.ID, Name: a.Name, Transport: a.Transport, Command: a.Command,
-		Args: a.Args, Env: a.Env, URL: a.URL, Enabled: enabled, Insecure: insecure,
+		Args: a.Args, Env: a.Env, URL: a.URL, Enabled: enabled, Insecure: false,
 	}
 }
 
@@ -300,6 +299,11 @@ func (s *Server) toolCreateMCP() actool.CoreTool {
 			a.ID = 0
 			if strings.TrimSpace(a.Name) == "" || strings.TrimSpace(a.Transport) == "" {
 				return actool.Errorf("name / transport 必填"), nil
+			}
+			if a.Transport == "http" || a.Transport == "sse" {
+				if err := mcphttp.ValidateDestination(a.URL); err != nil {
+					return actool.Errorf("MCP URL 不被允许"), nil
+				}
 			}
 			id, err := s.m.pg.SaveMCP(a.toDB())
 			if err != nil {
@@ -317,6 +321,19 @@ func (s *Server) toolUpdateMCP() actool.CoreTool {
 			_ = json.Unmarshal(in, &a)
 			if a.ID == 0 {
 				return actool.Errorf("id 必填"), nil
+			}
+			if a.Transport == "http" || a.Transport == "sse" {
+				if err := mcphttp.ValidateDestination(a.URL); err != nil {
+					return actool.Errorf("MCP URL 不被允许"), nil
+				}
+			}
+			if all, err := s.m.pg.ListMCP(); err == nil {
+				for _, existing := range all {
+					if existing.ID == a.ID {
+						a.Env = mergeMaskedMCPEnv(existing.Env, a.Env)
+						break
+					}
+				}
 			}
 			if _, err := s.m.pg.SaveMCP(a.toDB()); err != nil {
 				return actool.Errorf(err.Error()), nil

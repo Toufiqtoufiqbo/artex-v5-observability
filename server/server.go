@@ -24,6 +24,7 @@ import (
 	"github.com/Autumn-27/artex/intercept"
 	"github.com/Autumn-27/artex/llmpool"
 	"github.com/Autumn-27/artex/llmrec"
+	"github.com/Autumn-27/artex/mcphttp"
 	"github.com/Autumn-27/artex/report"
 	"github.com/Autumn-27/artex/traffic"
 	"github.com/Autumn-27/norma/llm"
@@ -44,7 +45,7 @@ type Server struct {
 	ctx    context.Context
 
 	skillDir string // root directory for skill subdirectories
-	jwtKey   []byte // HS256 signing key loaded from / generated into dataDir/jwt.key
+	jwtKey   []byte // HS256 signing key loaded from / generated into the protected base dir (never the browsable data dir)
 
 	// concMu serializes concurrency-cap decisions (admission + reconcile) so a
 	// scheduler tick and an HTTP settings change / task creation can't both count
@@ -242,6 +243,9 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 	// authorize a new provider identity by itself.
 	agent.SeedTrustedProviderHosts(agent.TrustedProviderHostsFromEnv()...)
 	log.Printf("[trusted] provider hosts=%v", agent.TrustedProviderHosts())
+	// Remote MCP endpoints carry stored headers (bearer tokens). Install the
+	// operator destination allowlist once, before any MCP is connected.
+	mcphttp.SetAllowedHosts(mcphttp.AllowedHostsFromEnv())
 	if cfg, ok := s.loadLLMConfig(); ok {
 		if err := s.applyLLM(cfg); err != nil {
 			log.Printf("[engine] saved LLM config init failed — engine idle: %v", err)
@@ -1473,7 +1477,9 @@ func (s *Server) testLLM(w http.ResponseWriter, r *http.Request) {
 	// 是跑起来之后的事。
 	lat, reply, err := agent.TestConnection(r.Context(), cfg)
 	if err != nil {
-		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})
+		// The error may carry a provider response body or the destination URL.
+		// Return a fixed reason; details stay in the server log, not the API.
+		writeJSON(w, 200, map[string]any{"ok": false, "error": "连接测试失败：请检查配置（详情见服务端日志）"})
 		return
 	}
 	// 回传模型实际回复，让"测试通过"有据可查：看得见它确实说了话，而不只是 HTTP 200。

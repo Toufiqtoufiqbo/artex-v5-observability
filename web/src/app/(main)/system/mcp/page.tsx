@@ -302,9 +302,10 @@ export default function MCPPage() {
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={form.insecure}
+                disabled
                 onCheckedChange={(v) => setF({ insecure: v === true })}
               />
-              跳过 TLS 证书校验（自签证书）
+              跳过 TLS 证书校验（仅由服务端 ARTEX_MCP_INSECURE_HOSTS 控制）
             </label>
           </div>
         )}
@@ -323,6 +324,7 @@ export default function MCPPage() {
             value={form.env}
             onChange={(e) => setF({ env: e.target.value })}
           />
+          <p className="text-muted-foreground text-xs">已保存的值以 ******** 显示；保持该值不变即保留原密钥。</p>
         </div>
       </div>
     );

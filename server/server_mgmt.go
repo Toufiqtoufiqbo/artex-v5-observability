@@ -25,6 +25,7 @@ import (
 
 	"github.com/Autumn-27/artex/agent"
 	"github.com/Autumn-27/artex/db"
+	"github.com/Autumn-27/artex/mcphttp"
 	"github.com/Autumn-27/norma/llm"
 	"github.com/Autumn-27/norma/skill"
 )
@@ -854,10 +855,13 @@ func (s *Server) pgListMCP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	if ms == nil {
-		ms = []*db.MCPServer{}
+	// Env doubles as HTTP headers for remote MCPs (often a bearer token). Never
+	// return stored values to the browser; keep only the configured key names.
+	view := make([]*db.MCPServer, 0, len(ms))
+	for _, m := range ms {
+		view = append(view, maskedMCPServer(m))
 	}
-	writeJSON(w, 200, map[string]any{"servers": ms})
+	writeJSON(w, 200, map[string]any{"servers": view})
 }
 
 func (s *Server) pgSaveMCP(w http.ResponseWriter, r *http.Request) {
@@ -870,6 +874,25 @@ func (s *Server) pgSaveMCP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
+	if m.Transport == "http" || m.Transport == "sse" {
+		if err := mcphttp.ValidateDestination(m.URL); err != nil {
+			writeErr(w, 400, "MCP URL 不被允许")
+			return
+		}
+	}
+	// A masked env value from GET /api/mcp means "keep the stored secret".
+	// `insecure` is operator-only and never accepted from the client.
+	if m.ID != 0 {
+		if all, err := pg.ListMCP(); err == nil {
+			for _, existing := range all {
+				if existing.ID == m.ID {
+					m.Env = mergeMaskedMCPEnv(existing.Env, m.Env)
+					break
+				}
+			}
+		}
+	}
+	m.Insecure = false
 	isNew := m.ID == 0
 	id, err := pg.SaveMCP(&m)
 	if err != nil {

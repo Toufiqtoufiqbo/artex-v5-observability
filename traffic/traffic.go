@@ -174,8 +174,8 @@ type Traffic struct {
 	// allowlist enforced by the upstream hook (VIII.4.3; VIII.4.4 adds the
 	// `sealed` flag). map[string]struct{} keyed by lowercase "host" or
 	// "host:port" (both forms accepted).
-	egressAllowlist atomic.Value  // map[string]struct{}
-	egressSealed   atomic.Bool   // VIII.4.4: sealed=authoritative (deny-all when list empty)
+	egressAllowlist atomic.Value // map[string]struct{}
+	egressSealed    atomic.Bool  // VIII.4.4: sealed=authoritative (deny-all when list empty)
 	// VIII.4.6 Gate D — optional address-prefix policy and the loopback
 	// forwarder that performs the pinned upstream dial when sealed.
 	egressPrefixes atomic.Value // []netip.Prefix
@@ -909,7 +909,7 @@ func (t *Traffic) Page(f PageQuery, page, size int) (rows []ExchangeMeta, total 
 		args = append(args, vs...)
 	}
 	if h := strings.TrimSpace(f.Host); h != "" {
-		add("host LIKE ?", "%"+h+"%")
+		add("host LIKE ? ESCAPE '\\'", likeSubstring(h))
 	}
 	if m := strings.TrimSpace(f.Method); m != "" {
 		add("method=?", strings.ToUpper(m))
@@ -1055,19 +1055,29 @@ func (t *Traffic) Count() (int, error) {
 	return n, err
 }
 
+// likeSubstring builds a LIKE pattern whose input is treated literally. SQLite
+// treats % and _ as wildcards in LIKE, so a host filter containing either could
+// match (and, in DeleteHost, remove) unrelated hosts. ESCAPE '\' makes those
+// characters ordinary text; the backslash is escaped first so it cannot act as
+// the escape itself.
+func likeSubstring(s string) string {
+	s = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+	return "%" + s + "%"
+}
+
 // DeleteHost removes every recorded exchange whose host contains the given
-// substring — mirroring the UI's host filter, so what you filtered is what gets
-// deleted. Everything lives in SQLite, so the deletion is one transaction across
-// the index, bodies, full-text index and blob references. Content-addressed
-// blobs are shared across hosts and so are garbage-collected afterwards rather
-// than deleted by host. Returns rows deleted.
+// literal substring — mirroring the UI's host filter, so what you filtered is
+// what gets deleted. Everything lives in SQLite, so the deletion is one
+// transaction across the index, bodies, full-text index and blob references.
+// Content-addressed blobs are shared across hosts and so are garbage-collected
+// afterwards rather than deleted by host. Returns rows deleted.
 func (t *Traffic) DeleteHost(host string) (int64, error) {
-	like := "%" + host + "%"
+	like := likeSubstring(strings.TrimSpace(host))
 	t.wmu.Lock()
 	defer t.wmu.Unlock()
 	// Resolved before the rows go away: with a substring match, the index is the
 	// only record of which host directories the filter actually hit.
-	legacy, err := t.hostTrees(`host LIKE ?`, like)
+	legacy, err := t.hostTrees(`host LIKE ? ESCAPE '\'`, like)
 	if err != nil {
 		return 0, err
 	}
@@ -1076,7 +1086,7 @@ func (t *Traffic) DeleteHost(host string) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op once committed
-	n, err := t.deleteWhere(tx, `host LIKE ?`, like)
+	n, err := t.deleteWhere(tx, `host LIKE ? ESCAPE '\'`, like)
 	if err != nil {
 		return 0, err
 	}

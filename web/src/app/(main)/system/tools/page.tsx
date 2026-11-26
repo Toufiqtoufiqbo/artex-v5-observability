@@ -649,20 +649,22 @@ function CustomToolDialog({
       toast.error("删除失败：" + (e as Error).message);
     }
   }
-  // runTest dry-runs the CURRENT form (unsaved) with the sample params, so a
-  // template/script/request can be debugged before saving.
+  // runTest dry-runs the SAVED tool with sample params. Unsaved command/script
+  // specs are deliberately not executed by the server; HTTP dry runs must also
+  // pass the server's operator destination allowlist.
   async function runTest() {
+    if (isNew || !tool) {
+      toast.error("请先保存工具，再进行测试");
+      return;
+    }
     let params: Record<string, unknown> = {};
     if (paramsText.trim()) {
       try { params = JSON.parse(paramsText); } catch { toast.error("测试参数 JSON 格式错误"); return; }
     }
-    if (kind === "http" && ex.headers.trim()) {
-      try { JSON.parse(ex.headers); } catch { toast.error("headers JSON 格式错误"); return; }
-    }
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await api.testCustomTool({ kind, exec: buildExec(), params });
+      const r = await api.testCustomTool({ key: tool.key, kind, params });
       setTestResult(r);
     } catch (e) {
       setTestResult({ output: (e as Error).message, is_error: true });
