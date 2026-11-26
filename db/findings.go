@@ -92,7 +92,7 @@ func (d *DB) AddFinding(taskID, nodeID int64, vulnclass, name, severity, summary
 		nid = &nodeID
 	}
 	var id int64
-	fp := FindingFingerprint(taskID, vulnclass, name, assetIDs)
+	fp := FindingFingerprintV2(taskID, vulnclass, name, summary, evidence, assetIDs)
 	err := d.QueryRow(
 		`INSERT INTO findings (task_id, node_id, vulnclass, name, severity, summary, evidence, worker, asset_ids, finding_fingerprint)
 		 VALUES (NULLIF($1::bigint,0), $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $1::bigint>0 THEN $10 ELSE NULL END)

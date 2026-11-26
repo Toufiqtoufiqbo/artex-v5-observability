@@ -368,7 +368,7 @@ func RecordFindingTx(ctx context.Context, tx *sql.Tx, in RecordFindingInput, pre
 	}
 
 	fpStart := telemetry.StampStartedAt() // IX.2.3
-	fp := FindingFingerprint(in.TaskID, in.VulnClass, in.Name, in.AssetIDs)
+	fp := FindingFingerprintV2(in.TaskID, in.VulnClass, in.Name, in.Summary, in.Evidence, in.AssetIDs)
 	out := &RecordedFinding{Outcome: "new"}
 
 	// A duplicate is not an error and not a discard: it reuses the first

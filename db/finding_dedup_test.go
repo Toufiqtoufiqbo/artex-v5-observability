@@ -40,7 +40,7 @@ func TestFindingDedupSequential_v921(t *testing.T) {
 	d, task, es, marker := newDedupFixture(t, "sequential")
 	ctx := context.Background()
 	in := RecordFindingInput{TaskID: task.ID, VulnClass: marker, Name: "Blind SQL Injection (boolean)", Severity: SeverityHigh, Summary: "s", Evidence: "poc", Worker: "w1"}
-	fp := FindingFingerprint(task.ID, in.VulnClass, in.Name, in.AssetIDs)
+	fp := FindingFingerprintV2(task.ID, in.VulnClass, in.Name, in.Summary, in.Evidence, in.AssetIDs)
 
 	first, err := es.RecordFinding(ctx, in)
 	if first == nil || err != nil || first.Outcome != "new" {
@@ -106,7 +106,7 @@ func TestFindingDedupConcurrent_v921(t *testing.T) {
 	if len(ids) != 1 {
 		t.Fatalf("want 1 logical finding id, got %d: %v", len(ids), ids)
 	}
-	fp := FindingFingerprint(task.ID, in.VulnClass, in.Name, in.AssetIDs)
+	fp := FindingFingerprintV2(task.ID, in.VulnClass, in.Name, in.Summary, in.Evidence, in.AssetIDs)
 	if got := countByFingerprint(t, dOrFatal(t, es), fp); got != 1 {
 		t.Fatalf("rows for identity: want 1, got %d", got)
 	}
@@ -224,7 +224,7 @@ func TestFindingDedupDirectInsertConflict_v921(t *testing.T) {
 			t.Fatalf("direct concurrent inserts created different findings: %v", ids)
 		}
 	}
-	fp := FindingFingerprint(task.ID, marker, "Endpoint collision", []int64{9})
+	fp := FindingFingerprintV2(task.ID, marker, "Endpoint collision", "s", "poc", []int64{9})
 	if got := countByFingerprint(t, d, fp); got != 1 {
 		t.Fatalf("rows for identity: want 1, got %d", got)
 	}
