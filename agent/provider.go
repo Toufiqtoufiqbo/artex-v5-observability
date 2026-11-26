@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -389,8 +390,66 @@ func (t quotaAwareTransport) RoundTrip(req *http.Request) (*http.Response, error
 	if IsQuotaExhaustedMessage(string(body)) {
 		resp.StatusCode = http.StatusPaymentRequired
 		resp.Status = "402 Payment Required"
+		return resp, nil
+	}
+	// A per-minute limit is not account exhaustion: it recovers in seconds and
+	// the provider says when. Honouring that hint here avoids the outer retry
+	// loop's fixed 500ms backoff, which only burns the remaining quota.
+	replayable := req.Body == nil || req.GetBody != nil
+	if wait := providerRetryAfter(resp, body); wait > 0 && wait <= maxProviderRetryWait && replayable {
+		timer := time.NewTimer(wait)
+		select {
+		case <-req.Context().Done():
+			timer.Stop()
+			return nil, req.Context().Err()
+		case <-timer.C:
+		}
+		// Retry once through the base transport: the request is already
+		// authorized, and the capture/tee above recorded the 429 exchange.
+		retry := req.Clone(req.Context())
+		if req.GetBody != nil {
+			replay, rerr := req.GetBody()
+			if rerr != nil {
+				return resp, nil
+			}
+			retry.Body = replay
+		}
+		return t.base.RoundTrip(retry)
 	}
 	return resp, nil
+}
+
+// maxProviderRetryWait bounds how long a 429 hint may block a provider call.
+// Google's free-tier per-minute limit answers with ~45s; anything longer is
+// treated as a hard limit and handed back to the caller unchanged.
+const maxProviderRetryWait = 60 * time.Second
+
+// retryAfterHintRe matches both prose ("Please retry in 44.7s") and the JSON
+// field Google returns ("retryDelay": "44s").
+var retryAfterHintRe = regexp.MustCompile(`(?i)(?:retry\s+in|retryDelay"?\s*:\s*"?)\s*([0-9]+(?:\.[0-9]+)?)\s*s`)
+
+// providerRetryAfter reads the wait hint a 429 response carries, from either
+// the Retry-After header or the provider's body. Returns 0 when absent.
+func providerRetryAfter(resp *http.Response, body []byte) time.Duration {
+	if resp == nil {
+		return 0
+	}
+	if v := strings.TrimSpace(resp.Header.Get("Retry-After")); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+		if ts, err := http.ParseTime(v); err == nil {
+			if d := time.Until(ts); d > 0 {
+				return d
+			}
+		}
+	}
+	if m := retryAfterHintRe.FindSubmatch(body); m != nil {
+		if secs, err := strconv.ParseFloat(string(m[1]), 64); err == nil && secs > 0 {
+			return time.Duration(secs * float64(time.Second))
+		}
+	}
+	return 0
 }
 
 // requestBodySnapshot copies an outgoing request body without consuming it.
