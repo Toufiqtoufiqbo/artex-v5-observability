@@ -25,6 +25,7 @@ import (
 // into the frontier. It is the sole intent generator.
 type Planner struct {
 	findingRecorder   FindingRecorder
+	evidenceVerifier  EvidenceVerifier
 	prov              llm.Provider
 	model             string
 	tx                *transcript.Store                      // raw LLM conversation persistence (nil = off)
@@ -377,6 +378,7 @@ func (p *Planner) Plan(ctx context.Context, taskID int64, as *db.AssetStore, ts 
 	p.compactor.OnPlannerRound(ctx, ts)
 	tsx := NewToolSet(ts, "planner")
 	tsx.SetFindingRecorder(p.findingRecorder)
+	tsx.SetEvidenceVerifier(p.evidenceVerifier)
 	if as != nil {
 		tsx.SetAssetStore(as, as.Companies())
 	}
@@ -433,7 +435,7 @@ func (p *Planner) Plan(ctx context.Context, taskID int64, as *db.AssetStore, ts 
 		DeferredTools:   def.Deferred,
 		UnlockSet:       def.Unlock,
 		PermissionMode:  permission.ModeBypass,
-		EnableWebFetch: strings.TrimSpace(p.proxyAddr) != "", // 走记录代理留痕；载入代理 CA 验证 MITM 重签的 HTTPS 证书
+		EnableWebFetch:  strings.TrimSpace(p.proxyAddr) != "", // 走记录代理留痕；载入代理 CA 验证 MITM 重签的 HTTPS 证书
 		WebFetchProxy:   p.proxyAddr,
 		WebFetchCACert:  p.proxyCACert,
 		// 联网搜索(可选)。ddgs 无需 key；brave-free 需 BraveKey；tavily 需 TavilyKey。

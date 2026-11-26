@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -44,8 +45,16 @@ func goalEvidenceText(n *db.Node) string {
 	return b.String()
 }
 
-// gateGoalEvidence validates the evidence node attached to a goal.
-func gateGoalEvidence(n *db.Node) error {
+// FactEvidenceText exposes the same flattened text to the host's verifier so
+// the claim it corroborates is exactly the claim the shape gate inspected.
+func FactEvidenceText(n *db.Node) string { return goalEvidenceText(n) }
+
+// gateGoalEvidence validates the evidence node attached to a goal. Shape checks
+// are always applied; when the host wires an EvidenceVerifier, a fact must also
+// be corroborated by an artifact the process actually recorded (a real traffic
+// exchange, or a tool result in this task). Text alone can no longer prove a
+// goal. Findings pass because they already went through report_finding's gate.
+func gateGoalEvidence(ctx context.Context, n *db.Node, verifier EvidenceVerifier, taskID int64) error {
 	if n == nil {
 		return fmt.Errorf("evidence node is missing")
 	}
@@ -62,6 +71,11 @@ func gateGoalEvidence(n *db.Node) error {
 		}
 		if !proofArtifactRe.MatchString(text) {
 			return fmt.Errorf("evidence fact has no reproducible artifact: cite the request/response, status code, measured byte/record delta or tool output in detail/evidence, or record a finding")
+		}
+		if verifier != nil {
+			if err := verifier.VerifyFact(ctx, taskID, n); err != nil {
+				return fmt.Errorf("evidence fact is not corroborated by recorded traffic/tool output: %w", err)
+			}
 		}
 		return nil
 	default:

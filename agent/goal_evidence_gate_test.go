@@ -1,12 +1,24 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/Autumn-27/artex/db"
 )
+
+type fakeEvidenceVerifier struct {
+	err  error
+	seen int
+}
+
+func (f *fakeEvidenceVerifier) VerifyFact(_ context.Context, _ int64, _ *db.Node) error {
+	f.seen++
+	return f.err
+}
 
 func gateNode(kind, payload string) *db.Node {
 	n := &db.Node{Kind: kind, ID: 7}
@@ -63,7 +75,7 @@ func TestGateGoalEvidence(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := gateGoalEvidence(tc.node)
+			err := gateGoalEvidence(context.Background(), tc.node, nil, 0)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("expected evidence to pass, got %v", err)
@@ -77,6 +89,32 @@ func TestGateGoalEvidence(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestGateGoalEvidenceUsesHostVerifier(t *testing.T) {
+	fact := gateNode(db.KindFact, `{"summary":"login rejected payload","detail":"POST /rest/user/login returned status=401"}`)
+	good := &fakeEvidenceVerifier{}
+	if err := gateGoalEvidence(context.Background(), fact, good, 42); err != nil {
+		t.Fatalf("corroborated fact was denied: %v", err)
+	}
+	if good.seen != 1 {
+		t.Fatalf("verifier called %d times, want 1", good.seen)
+	}
+
+	bad := &fakeEvidenceVerifier{err: errors.New("cited traffic does not exist")}
+	err := gateGoalEvidence(context.Background(), fact, bad, 42)
+	if err == nil || !strings.Contains(err.Error(), "not corroborated") || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("uncorroborated fact was not denied: %v", err)
+	}
+
+	// Findings pass their own gate; host corroboration is not re-run.
+	finding := gateNode(db.KindFinding, `{"name":"SQLi"}`)
+	if err := gateGoalEvidence(context.Background(), finding, bad, 42); err != nil {
+		t.Fatalf("finding should bypass fact verifier: %v", err)
+	}
+	if bad.seen != 1 {
+		t.Fatalf("finding invoked fact verifier %d times", bad.seen)
 	}
 }
 

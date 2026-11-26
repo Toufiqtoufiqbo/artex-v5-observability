@@ -53,12 +53,13 @@ func compactIntents(ns []*db.Node, parentsOf, yieldsOf map[int64][]int64) []map[
 // ToolSet exposes the PG-backed dual graph (asset + exploration) to an LLM agent.
 // One ToolSet is created per planner/worker run; per-run signals live here.
 type ToolSet struct {
-	findingRecorder FindingRecorder
-	as              *db.AssetStore   // asset store (optional; nil = asset tools not available)
-	cs              *db.CompanyStore // company store (optional)
-	ts              *db.ExplorationStore
-	worker          string
-	taskID          int64 // PG tasks.id; 0 when unknown (tests / orchestrator cross-task reads)
+	findingRecorder  FindingRecorder
+	evidenceVerifier EvidenceVerifier // host-provided check of fact artifacts against recorded traffic/activity
+	as               *db.AssetStore   // asset store (optional; nil = asset tools not available)
+	cs               *db.CompanyStore // company store (optional)
+	ts               *db.ExplorationStore
+	worker           string
+	taskID           int64 // PG tasks.id; 0 when unknown (tests / orchestrator cross-task reads)
 	// coverageDisabled mirrors tasks.coverage_enabled=false. Stored inverted so the
 	// zero value (all existing ToolSet constructions) means ENABLED — matching the
 	// DB default (true). When true: graphOverviewData drops the coverage block, the
@@ -1218,13 +1219,13 @@ func (t *ToolSet) listGoals() actool.CoreTool {
 }
 
 func (t *ToolSet) proveGoal() actool.CoreTool {
-	return t.writeExpTool("prove_goal", "当你判断某个发现/事实证明了某个目标达成时调用：把证据节点连到目标节点，并标记目标 met。",
+	return t.writeExpTool("prove_goal", "当你判断某个发现/事实证明了某个目标达成时调用：把证据节点连到目标节点，并标记目标 met。fact 必须能通过证据核验：报告 finding，或引用本任务真实记录的流量/工具结果（traffic_refs 或逐字请求行+状态行）；纯文字断言会被拒绝。",
 		obj(map[string]any{
 			"goal_id":     idp("目标节点 id"),
 			"evidence_id": idp("证明它的发现/事实节点 id"),
 			"reason":      str("为什么这个证据满足该目标"),
 		}, "goal_id", "evidence_id"),
-		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+		func(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				GoalID     json.RawMessage `json:"goal_id"`
 				EvidenceID json.RawMessage `json:"evidence_id"`
@@ -1246,7 +1247,7 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 			// Goal gate: a bare assertion is not proof. Findings pass; facts must
 			// carry a reproducible artifact (request/response, status, measured
 			// delta or tool output) before they may prove a goal.
-			if gerr := gateGoalEvidence(evidenceNode); gerr != nil {
+			if gerr := gateGoalEvidence(ctx, evidenceNode, t.evidenceVerifier, t.taskID); gerr != nil {
 				return actool.Errorf("prove_goal denied: " + gerr.Error()), nil
 			}
 			_ = t.ts.Link(ev, db.RelProves, goal)
@@ -1396,12 +1397,13 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 // must NOT be stuffed into the asset graph via upsert_asset.
 // factItem 是 record_fact 批量/单条的一条事实。
 type factItem struct {
-	Summary    string            `json:"summary"`
-	Detail     string            `json:"detail"`
-	Evidence   string            `json:"evidence"`   // 一行关键证据（命令+关键输出行），支撑结论、便于事后核对
-	Confidence string            `json:"confidence"` // observed（直接看到）| inferred（据现象推断）
-	IntentID   json.RawMessage   `json:"intent_id"`
-	AssetIDs   []json.RawMessage `json:"asset_ids"`
+	Summary     string            `json:"summary"`
+	Detail      string            `json:"detail"`
+	Evidence    string            `json:"evidence"`   // 一行关键证据（命令+关键输出行），支撑结论、便于事后核对
+	Confidence  string            `json:"confidence"` // observed（直接看到）| inferred（据现象推断）
+	IntentID    json.RawMessage   `json:"intent_id"`
+	AssetIDs    []json.RawMessage `json:"asset_ids"`
+	TrafficRefs []db.TrafficRef   `json:"traffic_refs"` // 真实流量 ID；prove_goal 会核验其确实存在且支撑结论
 }
 
 // recordOneFact 写一条 fact 节点并连到意图（intent→yields→fact）。defaultIntent 为
@@ -1419,6 +1421,13 @@ func (t *ToolSet) recordOneFact(it factItem, defaultIntent int64) (int64, error)
 	}
 	if c := strings.TrimSpace(it.Confidence); c != "" {
 		payload["confidence"] = c
+	}
+	if len(it.TrafficRefs) > 0 {
+		refs, err := db.NormalizeTrafficRefs(it.TrafficRefs)
+		if err != nil {
+			return 0, err
+		}
+		payload["traffic_refs"] = refs
 	}
 	intent := pid(it.IntentID)
 	if intent <= 0 {
@@ -1449,15 +1458,17 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 		"⚠️只写你在工具输出里【真实看到】的结论，不要脑补。evidence 与 confidence 用来防止不准确的结论污染图谱：\n"+
 		"  · evidence=支撑本结论的【一行】关键证据（命令+最能证明的那一两行输出），**务必简洁**——细节已在 detail，这里不要再粘大段输出。\n"+
 		"  · confidence=observed（输出里直接看到）| inferred（据现象推断）。\n"+
-		"  · **否定类结论**（不可注入/端口关闭/未发现入口等）只写\"观察 + 试探性读法\"——陈述你实际看到什么，方向是否放弃由规划者综合全局定；务必给 evidence，手段没穷尽或证据弱（含只探一次、看起来像）标 inferred，确已穷尽且直接看到才标 observed。",
+		"  · **否定类结论**（不可注入/端口关闭/未发现入口等）只写\"观察 + 试探性读法\"——陈述你实际看到什么，方向是否放弃由规划者综合全局定；务必给 evidence，手段没穷尽或证据弱（含只探一次、看起来像）标 inferred，确已穷尽且直接看到才标 observed。\n"+
+		"  · **用于 prove_goal 的 HTTP 事实**必须附 traffic_refs（traffic_search/traffic_get 返回的真实 id）或 evidence 中逐字引用已记录的请求行+状态行；prove_goal 会核验本任务的真实流量/工具结果，光有文字描述会被拒绝。",
 		obj(map[string]any{
-			"facts":      map[string]any{"type": "array", "description": "【有多条不同结论时用】事实数组，元素字段同下方顶层字段（summary/detail/evidence/confidence/intent_id/asset_ids）；省略 intent_id 则用顶层 intent_id。返回 ids 与本数组等长、同序。", "items": map[string]any{"type": "object"}},
-			"summary":    str("对本次探索结论的【总结性一句话】（是对 detail 的概括）"),
-			"intent_id":  idp("产生本事实的意图 id（你领到的意图；批量时作为各条默认）"),
-			"detail":     str("本事实的相关细节：把这次探索的多个观察事实都写进这里"),
-			"evidence":   str("【一行】关键证据：命令 + 最能证明结论的那一两行输出。务必简洁，不要粘大段输出（细节放 detail）。"),
-			"confidence": str("observed（输出里直接看到）| inferred（据现象推断）。否定结论务必如实标注。"),
-			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "相关资产 id（可选，0/1/多个）：该事实涉及哪些资产"},
+			"facts":        map[string]any{"type": "array", "description": "【有多条不同结论时用】事实数组，元素字段同下方顶层字段（summary/detail/evidence/confidence/intent_id/asset_ids/traffic_refs）；省略 intent_id 则用顶层 intent_id。返回 ids 与本数组等长、同序。", "items": map[string]any{"type": "object"}},
+			"summary":      str("对本次探索结论的【总结性一句话】（是对 detail 的概括）"),
+			"intent_id":    idp("产生本事实的意图 id（你领到的意图；批量时作为各条默认）"),
+			"detail":       str("本事实的相关细节：把这次探索的多个观察事实都写进这里"),
+			"evidence":     str("【一行】关键证据：命令 + 最能证明结论的那一两行输出。务必简洁，不要粘大段输出（细节放 detail）。"),
+			"confidence":   str("observed（输出里直接看到）| inferred（据现象推断）。否定结论务必如实标注。"),
+			"asset_ids":    map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "相关资产 id（可选，0/1/多个）：该事实涉及哪些资产"},
+			"traffic_refs": HintTrafficSchema(),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
