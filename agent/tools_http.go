@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -34,15 +35,28 @@ func newHTTPTool() actool.CoreTool {
 			"description":          "Request headers as name/value pairs. Override the pinned session headers for this call.",
 			"additionalProperties": map[string]any{"type": "string"},
 		},
-		"body":             str("Raw request body. For JSON, send the JSON text here and set content_type."),
-		"content_type":     str("Content-Type header. Defaults to application/json when the body parses as JSON, otherwise text/plain."),
+		"body":         str("Raw request body. For JSON, send the JSON text here and set content_type. Ignored when form_fields/files are provided."),
+		"body_base64":  str("Optional raw body encoded as base64. Use when body is binary. Ignored when form_fields/files are provided."),
+		"form_fields":  map[string]any{"type": "object", "description": "Multipart form fields as name/value pairs. When set, request is sent as multipart/form-data.", "additionalProperties": map[string]any{"type": "string"}},
+		"files": map[string]any{
+			"type":        "array",
+			"description": "Multipart file parts. When set, request is sent as multipart/form-data.",
+			"items": obj(map[string]any{
+				"field":        str("Form field name, e.g. uploadedFile."),
+				"filename":     str("Filename to send, e.g. ../test.txt or shell.jsp."),
+				"content":      str("File content as text."),
+				"content_base64": str("Optional file content encoded as base64."),
+				"content_type": str("Optional part Content-Type."),
+			}, "field"),
+		},
+		"content_type":     str("Content-Type header. Defaults to application/json when the body parses as JSON, otherwise text/plain. For multipart, boundary is set automatically unless you explicitly provide a full multipart content-type."),
 		"timeout_ms":       intp("Timeout in milliseconds (default 30000, max 120000)."),
 		"insecure":         map[string]any{"type": "boolean", "description": "Skip TLS certificate verification (self-signed lab targets)."},
 		"follow_redirects": map[string]any{"type": "boolean", "description": "Follow 3xx redirects. Default false so the status and Location header stay visible."},
 		"max_body_chars":   intp("Maximum response-body characters returned (default 12000)."),
 	}, "url")
 
-	desc := "Send a raw HTTP request (any method, custom headers, raw body) and return the status line, response headers and body. Use this for POST/PUT/PATCH/DELETE, JSON APIs, form logins, JSON-RPC/MCP, GraphQL and any probe where the method or body matters. Cookies are shared per host across calls, so one successful login authenticates later requests automatically."
+	desc := "Send a raw HTTP request (any method, custom headers, raw body, or multipart form/file upload) and return the status line, response headers and body. Use this for POST/PUT/PATCH/DELETE, JSON APIs, form logins, JSON-RPC/MCP, GraphQL, file uploads, and any probe where the method or body matters. For multipart uploads, provide form_fields and/or files; do not manually set a multipart boundary. Cookies are shared per host across calls, so one successful login authenticates later requests automatically."
 
 	return actool.Build(actool.Spec{
 		Name:        "HTTPRequest",
@@ -88,11 +102,20 @@ func runHTTPRequest(ctx context.Context, in json.RawMessage, tc *actool.ToolCont
 		URL             string            `json:"url"`
 		Headers         map[string]string `json:"headers"`
 		Body            string            `json:"body"`
-		ContentType     string            `json:"content_type"`
-		TimeoutMS       int               `json:"timeout_ms"`
-		Insecure        bool              `json:"insecure"`
-		FollowRedirects bool              `json:"follow_redirects"`
-		MaxBodyChars    int               `json:"max_body_chars"`
+		BodyBase64      string            `json:"body_base64"`
+		FormFields      map[string]string `json:"form_fields"`
+		Files           []struct {
+			Field         string `json:"field"`
+			Filename      string `json:"filename"`
+			Content       string `json:"content"`
+			ContentBase64 string `json:"content_base64"`
+			ContentType   string `json:"content_type"`
+		} `json:"files"`
+		ContentType     string `json:"content_type"`
+		TimeoutMS       int    `json:"timeout_ms"`
+		Insecure        bool   `json:"insecure"`
+		FollowRedirects bool   `json:"follow_redirects"`
+		MaxBodyChars    int    `json:"max_body_chars"`
 	}
 	if err := json.Unmarshal(in, &a); err != nil {
 		return actool.Errorf("HTTPRequest: invalid input: " + err.Error()), nil
@@ -109,16 +132,56 @@ func runHTTPRequest(ctx context.Context, in json.RawMessage, tc *actool.ToolCont
 		timeout = time.Duration(a.TimeoutMS) * time.Millisecond
 	}
 
-	res, err := doHTTP(ctx, httpCall{
+	call := httpCall{
 		Method:          method,
 		URL:             rawURL,
 		Headers:         a.Headers,
-		Body:            a.Body,
 		ContentType:     a.ContentType,
 		Timeout:         timeout,
 		Insecure:        a.Insecure,
 		FollowRedirects: a.FollowRedirects,
-	})
+	}
+
+	hasMultipart := len(a.FormFields) > 0 || len(a.Files) > 0
+	if hasMultipart {
+		call.MultipartFields = a.FormFields
+		for _, f := range a.Files {
+			field := strings.TrimSpace(f.Field)
+			if field == "" {
+				return actool.Errorf("HTTPRequest: multipart file field is required"), nil
+			}
+			content := []byte(f.Content)
+			if f.ContentBase64 != "" {
+				decoded, err := base64.StdEncoding.DecodeString(f.ContentBase64)
+				if err != nil {
+					decoded, err = base64.RawStdEncoding.DecodeString(f.ContentBase64)
+				}
+				if err != nil {
+					return actool.Errorf(fmt.Sprintf("HTTPRequest: invalid content_base64 for field %q: %v", field, err)), nil
+				}
+				content = decoded
+			}
+			call.MultipartFiles = append(call.MultipartFiles, httpMultipartFile{
+				Field:       field,
+				Filename:    f.Filename,
+				Content:     content,
+				ContentType: f.ContentType,
+			})
+		}
+	} else if a.BodyBase64 != "" {
+		decoded, err := base64.StdEncoding.DecodeString(a.BodyBase64)
+		if err != nil {
+			decoded, err = base64.RawStdEncoding.DecodeString(a.BodyBase64)
+		}
+		if err != nil {
+			return actool.Errorf("HTTPRequest: invalid body_base64: " + err.Error()), nil
+		}
+		call.Body = string(decoded)
+	} else {
+		call.Body = a.Body
+	}
+
+	res, err := doHTTP(ctx, call)
 	if err != nil {
 		return actool.Errorf("HTTPRequest: " + err.Error()), nil
 	}

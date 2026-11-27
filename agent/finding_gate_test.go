@@ -133,6 +133,47 @@ func TestHTTPRequestTool(t *testing.T) {
 
 // TestHTTPRequestToolRejectsBadURL keeps the tool from being used as a file or
 // scheme escape hatch.
+func TestHTTPRequestToolMultipartUpload(t *testing.T) {
+	var gotCT, gotRaw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCT = r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		gotRaw = string(b)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	seedLoopbackScope(t, srv.URL)
+
+	in, _ := json.Marshal(map[string]any{
+		"method": "POST",
+		"url":    srv.URL + "/upload",
+		"form_fields": map[string]string{
+			"email": "a@b.test",
+		},
+		"files": []map[string]any{{
+			"field":    "uploadedFile",
+			"filename": "../test.txt",
+			"content":  "hello-path-traversal",
+		}},
+	})
+	res, err := runHTTPRequest(context.Background(), in, nil)
+	if err != nil {
+		t.Fatalf("call error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("tool returned error: %s", res.Flatten())
+	}
+	if !strings.Contains(gotCT, "multipart/form-data") {
+		t.Fatalf("content-type=%q", gotCT)
+	}
+	for _, want := range []string{`name="email"`, "a@b.test", `name="uploadedFile"`, `filename="../test.txt"`, "hello-path-traversal"} {
+		if !strings.Contains(gotRaw, want) {
+			t.Fatalf("multipart body missing %q:\n%s", want, gotRaw)
+		}
+	}
+}
+
 func TestHTTPRequestToolRejectsBadURL(t *testing.T) {
 	for _, u := range []string{"file:///etc/passwd", "gopher://127.0.0.1:6379/_INFO", "not-a-url"} {
 		in, _ := json.Marshal(map[string]any{"url": u})

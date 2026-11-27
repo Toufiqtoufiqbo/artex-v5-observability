@@ -25,6 +25,7 @@ type rtFinding struct {
 	Name       string `json:"name"`
 	Class      string `json:"class"`
 	URL        string `json:"url"`
+	ReadURL    string `json:"read_url"`
 	Param      string `json:"param"`
 	Method     string `json:"method"`
 	BodyFormat string `json:"body_format"`
@@ -34,12 +35,13 @@ func newRetestTool() actool.CoreTool {
 	schema := obj(map[string]any{
 		"findings": map[string]any{
 			"type":        "array",
-			"description": "Findings to re-verify: id, name, class, url, param, method, body_format. Class should be one of sqli_boolean, sqli_time, xss_reflect, ssti_eval, path_traversal (the same kind that produced the finding).",
+			"description": "Findings to re-verify: id, name, class, url, param, method, body_format, and read_url for xss_stored. Class should be one of sqli_boolean, sqli_time, xss_reflect, xss_stored, ssti_eval, path_traversal (the same kind that produced the finding).",
 			"items": obj(map[string]any{
 				"id":          idp("finding id"),
 				"name":        str("finding name"),
 				"class":       str("vuln class / oracle kind"),
 				"url":         str("endpoint URL (same as original finding)"),
+				"read_url":    str("xss_stored only: endpoint that renders the persisted value"),
 				"param":       str("parameter to inject (same as original finding)"),
 				"method":      str("HTTP method (default GET)"),
 				"body_format": map[string]any{"type": "string", "enum": []string{"form", "json"}, "description": "POST body format (default form)"},
@@ -59,12 +61,14 @@ func runOracleFor(ctx context.Context, t probeTarget, kind string) (actool.Resul
 		return oracleSQLiTime(ctx, t)
 	case "xss_reflect":
 		return oracleXSSReflect(ctx, t)
+	case "xss_stored":
+		return oracleXSSStored(ctx, t)
 	case "ssti_eval":
 		return oracleSSTI(ctx, t)
 	case "path_traversal":
 		return oracleTraversal(ctx, t)
 	default:
-		return actool.Errorf(fmt.Sprintf("Retest: unknown class %q (use sqli_boolean, sqli_time, xss_reflect, ssti_eval, path_traversal)", kind)), nil
+		return actool.Errorf(fmt.Sprintf("Retest: unknown class %q (use sqli_boolean, sqli_time, xss_reflect, xss_stored, ssti_eval, path_traversal)", kind)), nil
 	}
 }
 
@@ -87,7 +91,7 @@ func runRetest(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 			method = "GET"
 		}
 		t := probeTarget{
-			URL: f.URL, Param: f.Param, Method: method, BodyFormat: f.BodyFormat,
+			URL: f.URL, ReadURL: f.ReadURL, Param: f.Param, Method: method, BodyFormat: f.BodyFormat,
 			Timeout:  15 * time.Second,
 			Insecure: true,
 		}

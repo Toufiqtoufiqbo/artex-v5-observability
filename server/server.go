@@ -221,6 +221,7 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 		wireAgentAugment(m.pg, s.skillDir, s.hostTools) // 可见 skills/MCP + 流量/编排 host 工具装配进 agent 工具集
 		domainReg := buildDomainReg(m.Assets())
 		wireTools(m.pg, domainReg) // 内置工具表：按 agent 过滤 + 覆盖描述/schema + 注入默认值
+		s.syncCaptureProxy()       // HTTPRequest 等目标流量走录制代理，流量证据可被 traffic_* 检索/绑定
 		seedPrompts(m.pg)          // 内置 agent 默认提示词正文播种进 agent_prompts(仅空时)
 		s.seedOrchestrationTools() // P2 跨任务编排工具 seed 进 tools 表(可按 agent 绑定)
 		if err := s.seedFindingRetester(); err != nil {
@@ -455,7 +456,24 @@ func providerPolicyForProfile(baseURL string) (agent.ProviderEgressPolicy, bool)
 
 // applyLLM (re)builds the planner/worker/main-agent from cfg and installs them on
 // the running engine as the GLOBAL active pair. Safe to call at runtime (UI configures LLM).
+// syncCaptureProxy routes target-assessment HTTP clients (HTTPRequest, Probe,
+// Crawl, oracle/differential tools) through the recording proxy when capture is
+// on, so their exchanges can be searched with traffic_* and bound to findings.
+// With capture off it clears any prior setting, restoring direct, pinned dials.
+// An invalid configuration is logged and leaves the previous value untouched
+// rather than silently bypassing evidence recording.
+func (s *Server) syncCaptureProxy() {
+	addr, ca := "", ""
+	if s.m.TrafficEnabled() {
+		addr, ca = s.m.ProxyAddr(), s.m.ProxyCACert()
+	}
+	if err := agent.SetCaptureProxy(addr, ca); err != nil {
+		log.Printf("[evidence] capture proxy wiring skipped: %v", err)
+	}
+}
+
 func (s *Server) applyLLM(cfg agent.Config) error {
+	s.syncCaptureProxy()
 	// VIII.4.6 Gate B — a runtime/UI BaseURL must be authorized by trusted
 	// configuration before a provider transport is built for it. VIII.4.7:
 	// profiles with no BaseURL keep the legacy default-endpoint semantics.
@@ -744,6 +762,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks/{id}/coverage", s.taskCoverage)
 	mux.HandleFunc("GET /api/tasks/{id}/coverage-graph", s.taskCoverageGraph)
 	mux.HandleFunc("GET /api/tasks/{id}/asset-refs", s.taskAssetRefs)
+	mux.HandleFunc("GET /api/tasks/{id}/findings", s.taskFindings)
+	mux.HandleFunc("GET /api/tasks/{id}/intents", s.taskIntents)
 	mux.HandleFunc("POST /api/tasks/{id}/assets", s.attachTaskAssets)
 	mux.HandleFunc("DELETE /api/tasks/{id}/assets/{assetID}", s.detachTaskAsset)
 	mux.HandleFunc("GET /api/tasks/{id}/intent-assets", s.taskIntentAssets)
@@ -1792,6 +1812,24 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 	dto := taskDTO(t, s.resolvedTaskStatus(t))
 	archiveBlockers, _ := s.m.PG().TaskArchiveBlockers()
 	applyTaskArchiveBlocker(&dto, archiveBlockers)
+	if metrics, err := s.m.PG().TaskListMetricsAll(); err == nil {
+		if metric, ok := metrics[t.ExpID]; ok {
+			dto.Tokens = tokenTotalDTO(metric.Tokens)
+			dto.LastActivity = metric.LastActivity
+			if live := s.engine.LastActivity(t.ID); live > dto.LastActivity {
+				dto.LastActivity = live
+			}
+			dto.GoalsTotal = metric.Goals.Total
+			dto.GoalsMet = metric.Goals.Met
+			dto.InFlight = metric.RunningIntents
+			dto.Findings = FindingSeverityDTO{
+				Critical: metric.Findings.Critical,
+				High:     metric.Findings.High,
+				Medium:   metric.Findings.Medium,
+				Low:      metric.Findings.Low,
+			}
+		}
+	}
 	writeJSON(w, 200, dto)
 }
 
@@ -2546,6 +2584,44 @@ func taskIntentHistoryPage(store *db.ExplorationStore, before int64, limit int, 
 		}
 		cursor = page[len(page)-1].ID
 	}
+}
+
+func (s *Server) taskFindings(w http.ResponseWriter, r *http.Request) {
+	t := s.m.ResolveTask(r.PathValue("id"))
+	if t == nil {
+		writeJSON(w, 200, []any{})
+		return
+	}
+	q := r.URL.Query()
+	params := make(url.Values, len(q)+1)
+	for k, v := range q {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		params[k] = cp
+	}
+	params.Set("task", t.ID)
+	r2 := r.Clone(r.Context())
+	r2.URL.RawQuery = params.Encode()
+	s.findings(w, r2)
+}
+
+func (s *Server) taskIntents(w http.ResponseWriter, r *http.Request) {
+	t := s.m.ResolveTask(r.PathValue("id"))
+	if t == nil {
+		writeJSON(w, 200, []any{})
+		return
+	}
+	q := r.URL.Query()
+	params := make(url.Values, len(q)+1)
+	for k, v := range q {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		params[k] = cp
+	}
+	params.Set("task", t.ID)
+	r2 := r.Clone(r.Context())
+	r2.URL.RawQuery = params.Encode()
+	s.intents(w, r2)
 }
 
 // explorationGraph returns the whole exploration chain (task graph) as nodes+edges.
@@ -3574,6 +3650,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 500, err.Error())
 			return
 		}
+		s.syncCaptureProxy()
 		changed = true
 	}
 	if req.GlobalProxy != nil {

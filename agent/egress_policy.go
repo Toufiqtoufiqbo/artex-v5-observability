@@ -1,8 +1,12 @@
 package agent
 
 import (
+	"crypto/x509"
+	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,7 +96,87 @@ func egressTaskIDString(taskID int64) string {
 }
 
 // egressHTTPProxyPolicy is the VIII.4.3 Phase B policy for target-assessment
-// clients: the logical destination passes scopeGuard before dispatch, so the
-// transport itself uses no proxy — environment variables alone never grant
-// new authorization.
-func egressHTTPProxyPolicy(*http.Request) (*url.URL, error) { return nil, nil }
+// clients: environment variables never grant authority, and the logical
+// destination passes scopeGuard before dispatch. The ONLY way this transport
+// uses a proxy is an explicitly configured recording proxy (see
+// SetCaptureProxy), which is part of the trusted platform configuration.
+var (
+	captureProxyMu sync.RWMutex
+	captureProxy   *url.URL
+	captureRoots   *x509.CertPool // CA of the recording MITM, when supplied
+)
+
+// SetCaptureProxy points target-assessment HTTP clients at the platform's
+// recording (MITM) proxy. Passing an empty address disables it. The proxy host
+// must be a literal loopback address: a remote proxy would move the dial out of
+// the task's pinned-address authorization boundary.
+//
+// Scope authorization is unchanged: doHTTP calls scopeGuard on the logical URL
+// before dispatch, and dialPinnedContext validates the PROXY address too, so no
+// destination escapes the task scope simply by routing through this proxy.
+func SetCaptureProxy(addr, caCertPath string) error {
+	proxy, roots, err := parseCaptureProxy(addr, caCertPath)
+	if err != nil {
+		return err
+	}
+	captureProxyMu.Lock()
+	captureProxy, captureRoots = proxy, roots
+	captureProxyMu.Unlock()
+	return nil
+}
+
+func parseCaptureProxy(addr, caCertPath string) (*url.URL, *x509.CertPool, error) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return nil, nil, nil
+	}
+	u, err := url.Parse(addr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("capture proxy: invalid address %q: %w", addr, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, nil, fmt.Errorf("capture proxy: unsupported scheme %q (need http/https)", u.Scheme)
+	}
+	host := strings.TrimSpace(u.Hostname())
+	if host == "" {
+		return nil, nil, fmt.Errorf("capture proxy: missing host")
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return nil, nil, fmt.Errorf("capture proxy: host %q is not a loopback IP literal", host)
+	}
+	if strings.TrimSpace(caCertPath) == "" {
+		return u, nil, nil
+	}
+	pem, err := os.ReadFile(caCertPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("capture proxy: read CA: %w", err)
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, nil, fmt.Errorf("capture proxy: CA file contains no valid certificate")
+	}
+	return u, pool, nil
+}
+
+func captureProxyConfig() (*url.URL, *x509.CertPool) {
+	captureProxyMu.RLock()
+	defer captureProxyMu.RUnlock()
+	return captureProxy, captureRoots
+}
+
+func egressHTTPProxyPolicy(*http.Request) (*url.URL, error) {
+	proxy, _ := captureProxyConfig()
+	return proxy, nil
+}
+
+// captureProxyURL is set on httpCall when the platform explicitly configured a
+// recording proxy; doHTTP uses it to authorize the dial address separately
+// from the logical target.
+func captureProxyURL() *url.URL {
+	proxy, _ := captureProxyConfig()
+	return proxy
+}

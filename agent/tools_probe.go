@@ -35,6 +35,7 @@ const (
 
 type probeTarget struct {
 	URL        string
+	ReadURL    string // xss_stored: separate GET endpoint that renders the stored value
 	Method     string
 	Param      string
 	BodyFormat string // form | json
@@ -42,6 +43,24 @@ type probeTarget struct {
 	Headers    map[string]string
 	Timeout    time.Duration
 	Insecure   bool
+}
+
+// readBackURL returns the endpoint used to observe a stored value. When the
+// caller does not supply one, re-read the write URL with the injected parameter
+// removed — otherwise a GET-based writer would reflect the payload in the read
+// phase and a stored-XSS verdict would be indistinguishable from reflection.
+func (p probeTarget) readBackURL() string {
+	if strings.TrimSpace(p.ReadURL) != "" {
+		return strings.TrimSpace(p.ReadURL)
+	}
+	u, err := url.Parse(p.URL)
+	if err != nil {
+		return p.URL
+	}
+	q := u.Query()
+	q.Del(p.Param)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (p probeTarget) call(value string) httpCall {
@@ -81,12 +100,13 @@ func newProbeTool() actool.CoreTool {
 	schema := obj(map[string]any{
 		"kind": map[string]any{
 			"type": "string",
-			"enum": []string{"sqli_boolean", "sqli_time", "xss_reflect", "ssti_eval", "path_traversal"},
+			"enum": []string{"sqli_boolean", "sqli_time", "xss_reflect", "xss_stored", "ssti_eval", "path_traversal"},
 			"description": "Oracle to run. sqli_boolean: true/false payload differential. sqli_time: delay-based. " +
-				"xss_reflect: does the payload come back unencoded. ssti_eval: does 7*7 evaluate to 49. " +
-				"path_traversal: does a known file leak.",
+				"xss_reflect: does the payload come back unencoded. xss_stored: write a unique marker via url/param, then re-read read_url (or url with the param removed) and require the unchanged marker to be rendered raw. " +
+				"ssti_eval: does 7*7 evaluate to 49. path_traversal: does a known file leak.",
 		},
 		"url":         str("Absolute target URL (without the parameter under test is fine)."),
+		"read_url":    str("xss_stored only: endpoint that renders the stored value. Defaults to url with the injected parameter removed."),
 		"param":       str("Parameter name to inject."),
 		"method":      map[string]any{"type": "string", "enum": []string{"GET", "POST"}, "description": "Default GET."},
 		"body_format": map[string]any{"type": "string", "enum": []string{"form", "json"}, "description": "POST body format (default form)."},
@@ -104,6 +124,7 @@ func runProbe(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 	var a struct {
 		Kind       string            `json:"kind"`
 		URL        string            `json:"url"`
+		ReadURL    string            `json:"read_url"`
 		Param      string            `json:"param"`
 		Method     string            `json:"method"`
 		BodyFormat string            `json:"body_format"`
@@ -130,7 +151,7 @@ func runProbe(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 		timeout = time.Duration(a.TimeoutMS) * time.Millisecond
 	}
 	t := probeTarget{
-		URL: a.URL, Method: method, Param: a.Param, BodyFormat: a.BodyFormat,
+		URL: a.URL, ReadURL: a.ReadURL, Method: method, Param: a.Param, BodyFormat: a.BodyFormat,
 		Extra: a.Extra, Headers: a.Headers, Timeout: timeout, Insecure: a.Insecure,
 	}
 
@@ -141,6 +162,8 @@ func runProbe(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 		return oracleSQLiTime(ctx, t)
 	case "xss_reflect":
 		return oracleXSSReflect(ctx, t)
+	case "xss_stored":
+		return oracleXSSStored(ctx, t)
 	case "ssti_eval":
 		return oracleSSTI(ctx, t)
 	case "path_traversal":
@@ -320,6 +343,61 @@ func oracleXSSReflect(ctx context.Context, t probeTarget) (actool.Result, error)
 		fmt.Fprintf(&b, "VERDICT: NOT CONFIRMED — marker present but the JavaScript-bearing part was altered/filtered. Inspect the context before reporting.\n")
 	} else {
 		fmt.Fprintf(&b, "VERDICT: NOT CONFIRMED — payload not reflected.\n")
+	}
+	return actool.Text(b.String()), nil
+}
+
+// oracleXSSStored verifies STORED (persistent) XSS, not reflection. It writes a
+// unique marker through the target parameter, then fetches an independent read
+// endpoint (with the injected parameter removed) and requires the *unchanged*
+// script-bearing payload to come back in a fresh response. The read phase uses
+// the shared cookie jar, so a login or session established during probing is
+// retained, but no payload is ever sent on the read request. A raw marker that
+// only appears in the write response is NOT stored XSS and is rejected.
+func oracleXSSStored(ctx context.Context, t probeTarget) (actool.Result, error) {
+	marker := "artexstored" + fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
+	payload := `"><svg/onload=` + marker + `>`
+	readURL := t.readBackURL()
+
+	write, werr := doHTTP(ctx, t.call(payload))
+	read, rerr := doHTTP(ctx, httpCall{Method: "GET", URL: readURL, Timeout: t.Timeout, Insecure: t.Insecure})
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "oracle=xss_stored param=%s write_method=%s write_url=%s read_url=%s\n", t.Param, t.Method, t.URL, readURL)
+	fmt.Fprintf(&b, "payload=%s\n", payload)
+	if werr != nil {
+		fmt.Fprintf(&b, "write_status=0 note: write request failed: %s\n", werr)
+	} else {
+		fmt.Fprintf(&b, "write_status=%d write_len=%d\n", write.Status, len(write.Body))
+	}
+	if rerr != nil {
+		fmt.Fprintf(&b, "read_status=0 note: read-back request failed: %s\n", rerr)
+	} else {
+		fmt.Fprintf(&b, "read_status=%d read_len=%d\n", read.Status, len(read.Body))
+	}
+
+	// A verdict requires BOTH a successful write and a successful, independent
+	// read. Never confirm from the write response alone.
+	if werr != nil || rerr != nil || write == nil || read == nil {
+		fmt.Fprintf(&b, "VERDICT: NOT CONFIRMED — write or read-back request failed; no stored-XSS proof.\n")
+		return actool.Text(b.String()), nil
+	}
+	body := string(read.Body)
+	rawHit := strings.Contains(body, payload)
+	markerHit := strings.Contains(body, marker)
+	encoded := !rawHit && strings.Contains(body, htmlEscape(payload))
+
+	fmt.Fprintf(&b, "read_raw_payload=%t read_marker_present=%t read_html_encoded=%t\n", rawHit, markerHit, encoded)
+	switch {
+	case rawHit:
+		fmt.Fprintf(&b, "VERDICT: CONFIRMED — the unique script payload was persisted and rendered unencoded by a separate GET (no payload on that request).\n")
+		fmt.Fprintf(&b, "evidence: %s %s param=%s payload=%s -> GET %s returned the unchanged payload (status %d)\n", t.Method, t.URL, t.Param, payload, readURL, read.Status)
+	case markerHit:
+		fmt.Fprintf(&b, "VERDICT: NOT CONFIRMED — the marker persisted but the script-bearing payload was altered/filtered; inspect the stored context before reporting.\n")
+	case encoded:
+		fmt.Fprintf(&b, "VERDICT: NOT CONFIRMED — the marker is HTML-encoded on read-back; no executable stored context.\n")
+	default:
+		fmt.Fprintf(&b, "VERDICT: NOT CONFIRMED — payload was not present in the read-back response; not stored.\n")
 	}
 	return actool.Text(b.String()), nil
 }

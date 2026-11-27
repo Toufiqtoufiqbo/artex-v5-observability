@@ -88,6 +88,82 @@ func TestProbeXSSReflect(t *testing.T) {
 	}
 }
 
+func TestProbeXSSStored(t *testing.T) {
+	// Stateful target: POST persists the message, GET renders it on a separate
+	// endpoint with no parameter. This is the shape of a real stored-XSS flow.
+	var stored string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/submit":
+			_ = r.ParseForm()
+			stored = r.FormValue("msg")
+			fmt.Fprint(w, "saved")
+		case "/view":
+			fmt.Fprintf(w, "<html><body>%s</body></html>", stored)
+		default:
+			fmt.Fprint(w, "ok")
+		}
+	}))
+	defer srv.Close()
+	seedLoopbackScope(t, srv.URL)
+
+	out := probe(t, map[string]any{
+		"kind": "xss_stored", "url": srv.URL + "/submit", "param": "msg",
+		"method": "POST", "body_format": "form", "read_url": srv.URL + "/view",
+	})
+	if !strings.Contains(out, "VERDICT: CONFIRMED") {
+		t.Fatalf("expected stored XSS CONFIRMED:\n%s", out)
+	}
+	if !strings.Contains(out, "read_url="+srv.URL+"/view") {
+		t.Fatalf("expected read-back URL in output:\n%s", out)
+	}
+}
+
+func TestProbeXSSStoredEncoded(t *testing.T) {
+	var stored string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/submit":
+			_ = r.ParseForm()
+			stored = r.FormValue("msg")
+			fmt.Fprint(w, "saved")
+		case "/view":
+			fmt.Fprintf(w, "<html><body>%s</body></html>", htmlEscape(stored))
+		default:
+			fmt.Fprint(w, "ok")
+		}
+	}))
+	defer srv.Close()
+	seedLoopbackScope(t, srv.URL)
+
+	out := probe(t, map[string]any{
+		"kind": "xss_stored", "url": srv.URL + "/submit", "param": "msg",
+		"method": "POST", "read_url": srv.URL + "/view",
+	})
+	if !strings.Contains(out, "VERDICT: NOT CONFIRMED") {
+		t.Fatalf("encoded stored value must not confirm:\n%s", out)
+	}
+}
+
+func TestProbeXSSStoredWriteOnlyReflection(t *testing.T) {
+	// The payload is reflected by the write response but never persisted. A
+	// naive oracle would call this stored XSS; ours must not.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		fmt.Fprintf(w, "<html><body>%s</body></html>", r.FormValue("msg"))
+	}))
+	defer srv.Close()
+	seedLoopbackScope(t, srv.URL)
+
+	out := probe(t, map[string]any{
+		"kind": "xss_stored", "url": srv.URL + "/submit", "param": "msg",
+		"method": "POST", "read_url": srv.URL + "/empty",
+	})
+	if !strings.Contains(out, "VERDICT: NOT CONFIRMED") {
+		t.Fatalf("write-only reflection must not confirm stored XSS:\n%s", out)
+	}
+}
+
 func TestProbeSSTI(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("name")

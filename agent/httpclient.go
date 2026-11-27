@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"sync"
@@ -97,11 +99,22 @@ func allSessionHosts() map[string]map[string]string {
 // HTTP client
 // ---------------------------------------------------------------------------
 
+type httpMultipartFile struct {
+	Field       string
+	Filename    string
+	Content     []byte
+	ContentType string
+}
+
 type httpCall struct {
 	Method          string
 	URL             string
 	Headers         map[string]string
 	Body            string
+	BodyReader      io.Reader
+	ContentLength   int64
+	MultipartFields map[string]string
+	MultipartFiles  []httpMultipartFile
 	ContentType     string
 	Timeout         time.Duration
 	Insecure        bool
@@ -187,6 +200,23 @@ func splitHostPort(addr string) (string, string) {
 	return addr, ""
 }
 
+// captureProxyDial pins the transport's dial to the trusted loopback proxy.
+// The target URL itself was already authorized by scopeGuard in doHTTP, and
+// the proxy enforces the operator's sealed egress allowlist on the upstream
+// dial. Only the proxy hop is dialed here; no other address is reachable.
+func captureProxyDial(proxy *url.URL) func(context.Context, string, string) (net.Conn, error) {
+	want := proxy.Host
+	if proxy.Port() == "" {
+		want = net.JoinHostPort(proxy.Hostname(), map[string]string{"http": "80", "https": "443"}[proxy.Scheme])
+	}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if !strings.EqualFold(addr, want) {
+			return nil, fmt.Errorf("%w: transport dial %q is not the configured capture proxy", ErrScopeDenied, addr)
+		}
+		return dialFn(ctx, network, addr)
+	}
+}
+
 func doHTTP(ctx context.Context, c httpCall) (*httpResult, error) {
 	method := strings.ToUpper(strings.TrimSpace(c.Method))
 	if method == "" {
@@ -216,7 +246,57 @@ func doHTTP(ctx context.Context, c httpCall) (*httpResult, error) {
 	}
 
 	var bodyReader io.Reader
-	if c.Body != "" {
+	if c.BodyReader != nil {
+		bodyReader = c.BodyReader
+	} else if len(c.MultipartFiles) > 0 || len(c.MultipartFields) > 0 {
+		pr, pw := io.Pipe()
+		mw := multipart.NewWriter(pw)
+		go func() {
+			var err error
+			defer func() {
+				if err != nil {
+					_ = pw.CloseWithError(err)
+					return
+				}
+				_ = pw.Close()
+			}()
+			for k, v := range c.MultipartFields {
+				if err = mw.WriteField(k, v); err != nil {
+					return
+				}
+			}
+			for _, f := range c.MultipartFiles {
+				name := strings.TrimSpace(f.Field)
+				if name == "" {
+					err = fmt.Errorf("multipart file field is required")
+					return
+				}
+				filename := f.Filename
+				if strings.TrimSpace(filename) == "" {
+					filename = "upload.bin"
+				}
+				h := make(textproto.MIMEHeader)
+				dispName := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(name)
+				dispFile := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(filename)
+				h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, dispName, dispFile))
+				if ct := strings.TrimSpace(f.ContentType); ct != "" {
+					h.Set("Content-Type", ct)
+				}
+				part, err := mw.CreatePart(h)
+				if err != nil {
+					return
+				}
+				if _, err = part.Write(f.Content); err != nil {
+					return
+				}
+			}
+			err = mw.Close()
+		}()
+		bodyReader = pr
+		if c.ContentType == "" {
+			c.ContentType = mw.FormDataContentType()
+		}
+	} else if c.Body != "" {
 		bodyReader = strings.NewReader(c.Body)
 	}
 
@@ -224,10 +304,13 @@ func doHTTP(ctx context.Context, c httpCall) (*httpResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
+	if c.ContentLength > 0 {
+		req.ContentLength = c.ContentLength
+	}
 
 	req.Header.Set("User-Agent", "artex/0.3.15 (+authorized-assessment)")
 	req.Header.Set("Accept", "*/*")
-	if c.Body != "" && c.ContentType == "" {
+	if c.Body != "" && c.BodyReader == nil && len(c.MultipartFiles) == 0 && len(c.MultipartFields) == 0 && c.ContentType == "" {
 		if looksLikeJSON(c.Body) {
 			req.Header.Set("Content-Type", "application/json")
 		} else {
@@ -252,12 +335,28 @@ func doHTTP(ctx context.Context, c httpCall) (*httpResult, error) {
 		req.Header.Set(k, v)
 	}
 
+	proxy := captureProxyURL()
+	dial := dialPinnedContext
+	if proxy != nil {
+		// The logical target already passed scopeGuard; the transport dials the
+		// trusted, loopback recording proxy instead. Verify the dial address is
+		// exactly that proxy so redirect or retry logic cannot turn it into an
+		// arbitrary destination bypassing the scope check.
+		dial = captureProxyDial(proxy)
+	}
+	tlsCfg := &tls.Config{InsecureSkipVerify: c.Insecure}
+	if !c.Insecure {
+		_, roots := captureProxyConfig()
+		if roots != nil {
+			tlsCfg.RootCAs = roots
+		}
+	}
 	tr := &http.Transport{
 		// VIII.4.3 (Phase B): environment proxies do not authorize target
 		// destinations; the logical destination passed scopeGuard above.
-		// doHTTP clients go direct unless an explicit proxy policy is added.
+		// Only the trusted recording proxy (SetCaptureProxy) can be used.
 		Proxy:               egressHTTPProxyPolicy,
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: c.Insecure},
+		TLSClientConfig:     tlsCfg,
 		TLSHandshakeTimeout: 15 * time.Second,
 		// VIII.4.5.4 — no connection reuse: every request must pass through
 		// dialPinnedContext so the destination is re-authorized on every dial.
@@ -266,8 +365,9 @@ func doHTTP(ctx context.Context, c httpCall) (*httpResult, error) {
 		// VIII.4.5.5: no HTTP/2 multiplexing on scoped target requests.
 		ForceAttemptHTTP2: false,
 		TLSNextProto:      map[string]func(string, *tls.Conn) http.RoundTripper{},
-		// VIII.4.5 — the actual dial is bound to a validated IP.
-		DialContext: dialPinnedContext,
+		// VIII.4.5 — direct dials are bound to a validated IP; proxied dials
+		// are pinned to the trusted loopback proxy.
+		DialContext: dial,
 	}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	if !c.NoJar {
