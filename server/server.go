@@ -3650,6 +3650,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 500, err.Error())
 			return
 		}
+		if *req.TrafficCapture && s.m.traffic != nil && s.m.traffic.EgressSealedEmpty() {
+			// Fail-closed proxy with no operator allowlist: every captured
+			// HTTPRequest/Probe/Crawl would return 502. Surface the cause
+			// loudly instead of leaving users to debug an empty response.
+			log.Printf("[evidence] WARNING: traffic_capture enabled but the recording proxy has an empty egress allowlist (deny-all). Captured tool requests will fail with 502 until ARTEX_EGRESS_ALLOWLIST is set at startup.")
+		}
 		s.syncCaptureProxy()
 		changed = true
 	}

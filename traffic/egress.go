@@ -80,6 +80,15 @@ func (t *Traffic) AllowedEgressHosts() []string {
 //   - unsealed (legacy): everything allowed.
 //   - sealed: destination must match the allowlist ("host" or "host:port"
 //     entry, case-insensitive); empty allowlist → deny all; empty host → deny.
+// EgressSealedEmpty reports whether the proxy is sealed with no allowlist
+// entries — a deny-all state. Enabling traffic_capture while sealed-empty makes
+// every captured tool request fail at the proxy with 502 until the operator
+// supplies ARTEX_EGRESS_ALLOWLIST at startup. Surfaces that state so callers
+// can warn instead of silently breaking target-assessment tools.
+func (t *Traffic) EgressSealedEmpty() bool {
+	return t.egressSealed.Load() && len(t.AllowedEgressHosts()) == 0
+}
+
 func (t *Traffic) EgressAllowed(req *http.Request) bool {
 	if !t.egressSealed.Load() {
 		return true
