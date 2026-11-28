@@ -20,7 +20,11 @@ import (
 )
 
 func (s *Server) evidenceStore() *evidence.Store {
-	return evidence.New(s.m.pg, s.m.traffic, filepath.Join(s.m.dir, "evidence"))
+	store := evidence.New(s.m.pg, s.m.traffic, filepath.Join(s.m.dir, "evidence"))
+	// The operator switch owns this behaviour: when binding is off, a finding
+	// must not silently gain traffic references from free-text evidence.
+	store.AutoBind = s.m.pg.GetBool(settingAgentTrafficBinding, false)
+	return store
 }
 
 // Add only new optional properties; preserve edited descriptions, existing

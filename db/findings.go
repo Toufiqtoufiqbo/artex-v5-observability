@@ -19,6 +19,9 @@ type DBFinding struct {
 	EvidenceVersion       int64
 	ReportEvidenceVersion int64
 	TrafficBindings       []FindingTrafficBinding // populated only for export
+	// DuplicateCount is the number of rows sharing this finding's fingerprint
+	// across all tasks. Populated only by the dedup=global list path.
+	DuplicateCount int
 
 	ID              int64
 	TaskID          *int64
@@ -141,6 +144,28 @@ func scanFindings(rows interface {
 	return out, rows.Err()
 }
 
+// scanDedupFindings is scanFindings plus the duplicate_count window column used
+// by the dedup=global read path.
+func scanDedupFindings(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}) ([]*DBFinding, error) {
+	var out []*DBFinding
+	for rows.Next() {
+		f := &DBFinding{}
+		var aidsJSON string
+		if err := rows.Scan(&f.ID, &f.TaskID, &f.NodeID, &f.VulnClass, &f.Name, &f.Severity,
+			&f.Summary, &f.Evidence, &f.Worker, &aidsJSON, &f.Status, &f.CreatedAt, &f.TaskDescription,
+			&f.EvidenceVersion, &f.ReportEvidenceVersion, &f.TrafficCount, &f.DuplicateCount); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(aidsJSON), &f.AssetIDs)
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
 // ListFindings returns all findings (newest first), joined with task description.
 // Kept for the dashboard's summary; the paginated 发现 page uses ListFindingsPage.
 func (d *DB) ListFindings(limit int) ([]*DBFinding, error) {
@@ -173,6 +198,13 @@ type FindingFilter struct {
 	// AssetScope 是资产树的节点 key(a:<id> / c:<id> / r:<domain> / __none__),
 	// 选中一个节点等于选中它的整棵子树。空 = 不按资产筛选。
 	AssetScope string
+
+	// DedupGlobal collapses the same vulnerability reported in several tasks
+	// into one row. finding_fingerprint is deliberately task-scoped, so the
+	// grouping key here is vulnclass + normalized title instead. Storage stays
+	// per-task (task evidence is never lost); only this read path presents a
+	// unique-finding view for dashboards and metrics.
+	DedupGlobal bool
 
 	// 下面三个由 applyAssetScope 从 AssetScope 解析而来,调用方不用设置。
 	assetIDs  []int64 // 子树里所有资产 id
@@ -259,6 +291,34 @@ func (d *DB) ListFindingsPage(f FindingFilter, page, pageSize int) ([]*DBFinding
 		return nil, 0, err
 	}
 	where, args := f.where()
+
+	if f.DedupGlobal {
+		// One row per vulnerability across every task. The stored fingerprint
+		// includes task scope by design, so group on the structural identity we
+		// can read back: class + normalized title. Untitled rows stay unique.
+		key := `lower(f.vulnclass) || '|' || lower(regexp_replace(COALESCE(NULLIF(trim(f.name), ''), 'id:' || f.id), '\s+', ' ', 'g'))`
+		var total int
+		if err := d.QueryRow(`SELECT COUNT(*) FROM (SELECT 1 FROM findings f LEFT JOIN tasks t ON f.task_id=t.id`+where+` GROUP BY `+key+`) x`, args...).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+		if total == 0 || page > (total-1)/pageSize+1 {
+			return []*DBFinding{}, total, nil
+		}
+		inner := fmt.Sprintf(`SELECT DISTINCT ON (%s) %s, count(*) OVER (PARTITION BY %s) AS duplicate_count FROM findings f LEFT JOIN tasks t ON f.task_id=t.id%s ORDER BY %s, f.created_at DESC, f.id DESC`, key, findingSelectCols, key, where, key)
+		outerOrder := "d.created_at DESC, d.id DESC"
+		if f.Sort == "severity" {
+			outerOrder = `CASE d.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC, d.created_at DESC, d.id DESC`
+		}
+		q := fmt.Sprintf(`SELECT * FROM (%s) d ORDER BY %s LIMIT $%d OFFSET $%d`, inner, outerOrder, len(args)+1, len(args)+2)
+		pageArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+		rows, err := d.Query(q, pageArgs...)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer rows.Close()
+		out, err := scanDedupFindings(rows)
+		return out, total, err
+	}
 
 	var total int
 	if err := d.QueryRow(`SELECT COUNT(*) FROM findings f LEFT JOIN tasks t ON f.task_id=t.id`+where, args...).Scan(&total); err != nil {

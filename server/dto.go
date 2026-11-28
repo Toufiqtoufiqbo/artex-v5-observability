@@ -304,6 +304,7 @@ func coverageAssetRefDTO(ref db.AssetRef) CoverageAssetRefDTO {
 
 type FindingDTO struct {
 	TrafficCount          int                        `json:"traffic_count"`
+	DuplicateCount        int                        `json:"duplicate_count,omitempty"` // dedup=global only: rows sharing this fingerprint across tasks
 	EvidenceVersion       int64                      `json:"evidence_version"`
 	ReportEvidenceVersion int64                      `json:"report_evidence_version"`
 	ReportStale           bool                       `json:"report_stale"`
@@ -455,7 +456,7 @@ func findingFromDB(f *db.DBFinding, assets map[int64]*db.Asset) FindingDTO {
 	d := FindingDTO{
 		ID:           i64s(f.ID),
 		FindingID:    i64s(f.ID),
-		TrafficCount: f.TrafficCount, EvidenceVersion: f.EvidenceVersion, ReportEvidenceVersion: f.ReportEvidenceVersion,
+		TrafficCount: f.TrafficCount, DuplicateCount: f.DuplicateCount, EvidenceVersion: f.EvidenceVersion, ReportEvidenceVersion: f.ReportEvidenceVersion,
 		ReportStale: f.Report != "" && f.EvidenceVersion != f.ReportEvidenceVersion, TrafficBindings: f.TrafficBindings,
 		VulnClass: f.VulnClass,
 		Name:      f.Name,

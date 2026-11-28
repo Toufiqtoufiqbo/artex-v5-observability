@@ -286,12 +286,21 @@ func ensureRunDir(base string, taskID, intentID int64) string {
 // cmdOutDir is the SDK large-tool-output spill dir under an agent's run dir.
 func cmdOutDir(dir string) string { return filepath.Join(dir, "cmd-output") }
 
+// workerDepthBlock is a code-owned prompt tail. An autonomous run on a real
+// target found three valid low/medium misconfigurations and stopped, without
+// ever trying a high-impact vector. The editable prompt body cannot enforce
+// depth, so this non-editable block asks for one confirmed high-impact attempt
+// (still inside the current intent's resources and the authorization scope).
+func workerDepthBlock() string {
+	return "\n\n**深度要求（代码固定，不可删改）**：不要因为拿到低/中危配置类问题就提前收尾。在本意图给出的资源与授权范围内，至少用真实载荷尝试并核对一条高影响方向（SQL 注入、认证绕过、存储型 XSS、路径穿越/任意文件读取、命令执行或反序列化）；拿到可复现请求/响应才 report_finding，触发不了就用 record_fact 记下嫌疑与失败原因交规划者，绝不硬报。只在上述方向确已尝试、或预算确实耗尽时才结束本意图；不得因此越出范围或做破坏性操作。"
+}
+
 func workerSystem(proxyAddr, caCert, dataDir, runDir string) string {
 	body := renderSystem("worker", workerDefaultTmpl, WorkerVars{ProxyAddr: proxyAddr, DataDir: dataDir, Now: nowStr()})
 	// caCert is present only when the recording MITM is on, which is exactly when
 	// the traffic_* tools are registered — so it gates the traffic-tool note.
 	// Optional finding guidance is added for every role after tool resolution.
-	return body + workerTrafficBlock(caCert != "") + workerArtifactSpec(runDir)
+	return body + workerTrafficBlock(caCert != "") + workerArtifactSpec(runDir) + workerDepthBlock()
 }
 
 // renderIntentTask formats the claimed intent for the worker's launch USER message:

@@ -2011,11 +2011,19 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 	// 带 task 参数 → 仅该任务（任务概览/发现 Tab 用），从 exploration_nodes 读（任务在则节点在）。
 	q := r.URL.Query()
 	taskParam := q.Get("task")
+	dedup := strings.EqualFold(strings.TrimSpace(q.Get("dedup")), "global")
 	if taskParam == "" {
 		// 带 page/limit → 服务端分页 {items,total,...}；不带 → 裸数组（dashboard 汇总用，
 		// 与 intents 端点的兼容策略一致）。筛选/排序统一下推到 SQL。
 		if q.Get("page") == "" && q.Get("limit") == "" {
-			fs, _ := s.m.pg.ListFindings(500)
+			var fs []*db.DBFinding
+			if dedup {
+				filter := findingFilterFromQuery(q)
+				filter.DedupGlobal = true
+				fs, _, _ = s.m.pg.ListFindingsPage(filter, 1, 500)
+			} else {
+				fs, _ = s.m.pg.ListFindings(500)
+			}
 			assets := s.resolveFindingAssets(fs)
 			out := make([]FindingDTO, 0, len(fs))
 			for _, f := range fs {
@@ -2026,7 +2034,9 @@ func (s *Server) findings(w http.ResponseWriter, r *http.Request) {
 		}
 		page := findingPaginationParam(q.Get("page"), 1, 0)
 		limit := findingPaginationParam(q.Get("limit"), 20, 200)
-		fs, total, err := s.m.pg.ListFindingsPage(findingFilterFromQuery(q), page, limit)
+		filter := findingFilterFromQuery(q)
+		filter.DedupGlobal = dedup
+		fs, total, err := s.m.pg.ListFindingsPage(filter, page, limit)
 		if err != nil {
 			writeErr(w, 500, err.Error())
 			return

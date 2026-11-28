@@ -26,6 +26,12 @@ type Store struct {
 	DB      *db.DB
 	Traffic *traffic.Traffic
 	Dir     string
+
+	// AutoBind derives traffic references from a finding's own HTTP evidence
+	// when the reporter supplied none. The server enables it only while
+	// agent_traffic_binding is on; callers that build a private export copy
+	// leave it false. See autobind.go for the conservative matching rules.
+	AutoBind bool
 }
 
 func New(pg *db.DB, tr *traffic.Traffic, dir string) *Store {
@@ -340,6 +346,12 @@ func (s *Store) prepare(ctx context.Context, refs []db.TrafficRef) ([]db.Prepare
 }
 
 func (s *Store) Record(ctx context.Context, in db.RecordFindingInput, refs []db.TrafficRef) (out *db.RecordedFinding, err error) {
+	// Autonomous reporters often write a reproducible HTTP artifact into the
+	// evidence but never call traffic_search. Bind it ourselves from the exact
+	// method/path/status the agent reported, before taking the DB write lock.
+	if len(refs) == 0 && s.AutoBind {
+		refs = s.autoBindRefs(ctx, in)
+	}
 	err = s.DB.WithEvidenceTx(ctx, func(tx *sql.Tx) error {
 		if err := db.LockTaskEvidenceTx(tx, in.TaskID); err != nil {
 			return err

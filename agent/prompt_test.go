@@ -80,3 +80,17 @@ func TestRenderSystemOverrideAndFallback(t *testing.T) {
 		t.Fatalf("worker without proxy must NOT inject trafficTool: %q", noProxy)
 	}
 }
+
+// The depth tail is code-owned: editing the worker prompt body cannot remove it.
+func TestWorkerDepthTailIsAlwaysPresent(t *testing.T) {
+	t.Cleanup(func() { PromptOverride = nil })
+	PromptOverride = func(string) (string, bool) { return "EDITED BODY", true }
+	for _, got := range []string{
+		workerSystem("", "", "/data", "/data"),
+		workerSystem("127.0.0.1:8080", "/ca.pem", "/data", "/data"),
+	} {
+		if !strings.Contains(got, "深度要求") || !strings.Contains(got, "高影响方向") {
+			t.Fatalf("worker depth tail missing: %q", got)
+		}
+	}
+}
