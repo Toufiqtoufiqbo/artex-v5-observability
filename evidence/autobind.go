@@ -52,11 +52,20 @@ func probesFromEvidence(text string) []evidenceProbe {
 		if path == "" || path == "/" {
 			continue
 		}
+		// Status codes are often written before the request line ("HTTP 200
+		// response from POST /path") and a baseline/duplicate status may follow
+		// it. Pick the nearest code by text distance instead of always taking
+		// the first one after the line.
 		status := text[statuses[0][2]:statuses[0][3]]
+		best := -1
 		for _, st := range statuses {
-			if st[0] > line[1] {
+			d := st[0] - line[0]
+			if d < 0 {
+				d = -d
+			}
+			if best < 0 || d < best {
+				best = d
 				status = text[st[2]:st[3]]
-				break
 			}
 		}
 		key := method + " " + path + " " + status

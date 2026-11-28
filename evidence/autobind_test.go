@@ -67,6 +67,16 @@ func TestAutoBindSkippedWhenDisabledOrAmbiguous(t *testing.T) {
 	}
 }
 
+func TestProbesFromEvidenceStatusBeforeRequest(t *testing.T) {
+	// Real reporter wording: "HTTP 200 response from POST /path ... baseline
+	// returns HTTP 401". The nearest status is 200, not the later baseline 401.
+	text := "HTTP 200 response from POST http://127.0.0.1:3000/rest/user/login with email payload; wrong credentials return HTTP 401"
+	probes := probesFromEvidence(text)
+	if len(probes) != 1 || probes[0].Status != "200" || probes[0].Path != "/rest/user/login" {
+		t.Fatalf("wrong probe: %+v", probes)
+	}
+}
+
 func TestProbesFromEvidence(t *testing.T) {
 	probes := probesFromEvidence("Baseline: GET /api/products -> HTTP 200\nInjection: POST /login -> status=401")
 	if len(probes) != 2 {
